@@ -27,9 +27,26 @@ Notlar:
 - Basarili veya hatali son durumdaki kayitlar secim guncellemesiyle degistirilmez.
 - `/batch` ekrani secili kayitlari, toplam USD tutarini ve Faz 2 progress iskeletini gosterir.
 
+## Faz 3
+
+Tamamlandi:
+
+- Playwright browser lifecycle icin `BrowserManager`
+- Portal login ve manuel 2FA icin `PortalSessionManager`
+- `/session` UI ekrani
+- `/api/session/*` endpointleri
+- `.env.example` portal ve Playwright alanlari
+- Session state/log mesaji akisi
+
+Notlar:
+
+- Browser headful calisir; default `PLAYWRIGHT_HEADLESS=false`.
+- 2FA kodu otomatik girilmez ve `.env` icinde tutulmaz.
+- Session hazir kontrolunde oncelik e-Arsiv menu linkindedir.
+- Faz 4'te ayni session/page uzerinden e-Arsiv olusturma akisi eklenecek.
+
 Henuz tamamlanmayan sonraki isler:
 
-- Faz 3: Playwright browser session ve login akisi
 - Faz 4: tek kayit icin taslak fatura POC
 - Faz 5: portal hata senaryolari
 - Faz 6: coklu batch

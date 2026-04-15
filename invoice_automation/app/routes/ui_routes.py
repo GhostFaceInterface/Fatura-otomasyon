@@ -11,13 +11,14 @@ from fastapi import APIRouter, File, Form, Query, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
+from invoice_automation.app.automation.session_manager import portal_session_manager
 from invoice_automation.app.config import ROOT_DIR, ensure_runtime_directories, settings
 from invoice_automation.app.constants import InvoiceStatus
 from invoice_automation.app.db.repository import InvoiceRecordRepository
 from invoice_automation.app.services.batch_service import BatchService
 from invoice_automation.app.services.import_service import ImportService
 from invoice_automation.app.services.selection_service import SelectionService
-from invoice_automation.app.utils.exceptions import ImportValidationError
+from invoice_automation.app.utils.exceptions import ImportValidationError, PortalSessionError
 
 logger = logging.getLogger(__name__)
 
@@ -127,6 +128,79 @@ def prepare_batch(request: Request) -> HTMLResponse:
             "request": request,
             "preview": preview,
             "prepared": True,
+        },
+    )
+
+
+@router.get("/session", response_class=HTMLResponse)
+def session(request: Request) -> HTMLResponse:
+    """Render browser session management screen."""
+
+    return templates.TemplateResponse(
+        "session.html",
+        {
+            "request": request,
+            "state": portal_session_manager.state,
+            "error": None,
+        },
+    )
+
+
+@router.post("/session/start", response_class=HTMLResponse)
+def start_session(request: Request) -> HTMLResponse:
+    """Start browser and advance login flow to the manual 2FA screen."""
+
+    error = None
+    try:
+        state = portal_session_manager.start_login()
+    except PortalSessionError as exc:
+        logger.exception("Portal session start failed")
+        state = portal_session_manager.state
+        error = str(exc)
+
+    return templates.TemplateResponse(
+        "session.html",
+        {
+            "request": request,
+            "state": state,
+            "error": error,
+        },
+    )
+
+
+@router.post("/session/verify", response_class=HTMLResponse)
+def verify_session(request: Request) -> HTMLResponse:
+    """Confirm that manual 2FA is complete and the session is ready."""
+
+    error = None
+    try:
+        state = portal_session_manager.confirm_manual_2fa_completed()
+    except PortalSessionError as exc:
+        logger.exception("Portal session verification failed")
+        state = portal_session_manager.state
+        error = str(exc)
+
+    return templates.TemplateResponse(
+        "session.html",
+        {
+            "request": request,
+            "state": state,
+            "error": error,
+        },
+    )
+
+
+@router.post("/session/close", response_class=HTMLResponse)
+def close_session(request: Request) -> HTMLResponse:
+    """Close the active browser session."""
+
+    state = portal_session_manager.close()
+    return templates.TemplateResponse(
+        "session.html",
+        {
+            "request": request,
+            "state": state,
+            "error": None,
         },
     )
 

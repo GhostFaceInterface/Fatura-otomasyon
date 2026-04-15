@@ -5,6 +5,8 @@
 - Import ve validasyon servisleri UI route'larindan ayridir.
 - Secim kurallari `SelectionService` icinde tutulur; repository sadece kontrollu PENDING/SELECTED gecislerini uygular.
 - Batch hazirligi `BatchService` uzerinden preview kontratiyla baslatilir.
+- Playwright lifecycle `BrowserManager` icinde tutulur.
+- Portal login ve manuel 2FA state akisi `PortalSessionManager` uzerinden yonetilir.
 - Durum degerleri `InvoiceStatus` enum'u ile merkezi tutulur.
-- Portal otomasyonu sonraki fazlarda `automation/` katmaninda Playwright ile ayrilacak.
+- Portal otomasyonu `automation/` katmaninda Playwright ile ayrilir.
 - Kayit bazli hatalar batch'i durdurmayacak; session-level kritik hatalar batch'i guvenli durduracak.

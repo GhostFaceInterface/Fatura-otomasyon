@@ -127,6 +127,12 @@ button:disabled {
   background: #fff3f3;
 }
 
+.inline-error {
+  padding: 12px;
+  border-color: #dc9a9a;
+  background: #fff3f3;
+}
+
 .inline-success {
   padding: 12px;
   border-color: #8fc7a9;
@@ -174,6 +180,48 @@ button:disabled {
 
 .batch-form {
   margin-top: 18px;
+}
+
+.session-state {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 18px 0;
+}
+
+.session-state div {
+  padding: 14px;
+  border: 1px solid #d7dde4;
+  border-radius: 8px;
+  background: #fbfcfd;
+}
+
+.session-state span {
+  display: block;
+  color: #52606d;
+  font-size: 13px;
+}
+
+.session-state strong {
+  display: block;
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+}
+
+.session-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 18px;
+}
+
+.secondary-button {
+  color: #182026;
+  background: #e8edf2;
+}
+
+.checklist li {
+  margin-bottom: 8px;
 }
 
 .muted {
@@ -244,6 +292,10 @@ th {
   }
 
   .summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .session-state {
     grid-template-columns: 1fr;
   }
 

@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="section">
+  <div class="section-header">
+    <div>
+      <h2>Browser Session</h2>
+      <p>Portal login akisi 2FA ekranina kadar otomatik ilerler. 2FA kodunu acik tarayicida manuel girin.</p>
+    </div>
+    <a class="button-link secondary" href="/batch">Batch Hazirligina Don</a>
+  </div>
+
+  {% if error %}
+  <div class="alert inline-error">
+    {{ error }}
+  </div>
+  {% endif %}
+
+  <div class="session-state">
+    <div>
+      <span>Durum</span>
+      <strong>{{ state.status }}</strong>
+    </div>
+    <div>
+      <span>Mesaj</span>
+      <strong>{{ state.message }}</strong>
+    </div>
+    <div>
+      <span>URL</span>
+      <strong>{{ state.current_url or "-" }}</strong>
+    </div>
+    <div>
+      <span>Guncelleme</span>
+      <strong>{{ state.updated_at }}</strong>
+    </div>
+  </div>
+
+  <div class="session-actions">
+    <form action="/session/start" method="post">
+      <button type="submit">Tarayiciyi Ac / Login Baslat</button>
+    </form>
+    <form action="/session/verify" method="post">
+      <button type="submit">2FA Tamam, Session Kontrol Et</button>
+    </form>
+    <form action="/session/close" method="post">
+      <button class="secondary-button" type="submit">Browser Kapat</button>
+    </form>
+  </div>
+</section>
+
+<section class="section">
+  <h2>Faz 3 Manuel Akis</h2>
+  <ol class="checklist">
+    <li><code>.env</code> icinde <code>PORTAL_USERNAME</code> ve <code>PORTAL_PASSWORD</code> alanlarini doldurun.</li>
+    <li><strong>Tarayiciyi Ac / Login Baslat</strong> butonuna basin.</li>
+    <li>Tarayicida 2FA ekrani acildiginda mail kodunu manuel girip <strong>Dogrula</strong> butonuna basin.</li>
+    <li>Panelde <strong>2FA Tamam, Session Kontrol Et</strong> butonuna basin.</li>
+    <li>Durum <code>READY</code> olursa Faz 4 icin session hazirdir.</li>
+  </ol>
+</section>
+{% endblock %}

@@ -1,11 +1,15 @@
 # Active Context
 
-Mevcut aktif is Faz 2 uygulamasini tamamlamak ve Faz 3'e hazir duruma gecirmektir.
+Mevcut aktif is Faz 3 uygulamasini tamamlamak ve Faz 4'e hazir session temeliyle gecmektir.
 
 Hedefler:
 
 - Faz 2 secim ve batch hazirlik akisi tamamlandi.
-- Sonraki ana is Faz 3 browser session yonetimidir.
-- Faz 3'te Playwright browser manager, session manager, login form doldurma ve manuel 2FA bekleme eklenecek.
+- Faz 3 browser session yonetimi tamamlandi.
+- Playwright browser manager ve portal session manager eklendi.
+- Login formu .env credential'lariyla doldurulur.
+- 2FA ekrani beklenir, kullanici kodu manuel girer.
+- 2FA sonrasi session hazirligi e-Arsiv menu linki veya URL fallback ile dogrulanir.
+- Sonraki ana is Faz 4 tek kayit icin taslak fatura POC'dir.
 
-Portal otomasyonu, login, 2FA ve gercek taslak olusturma henuz uygulanmadi. Secim ve batch hazirligi lokal veritabaninda kalir.
+Gercek taslak olusturma henuz uygulanmadi. Faz 4'te hazir session uzerinden e-Arsiv olusturma ekranina gidilecek.

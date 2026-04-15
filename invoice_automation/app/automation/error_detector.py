@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 import logging
+import re
+import unicodedata
 
 from invoice_automation.app.constants import (
     EFATURA_MUKELLEFI_ERROR_PATTERN,
@@ -38,7 +40,19 @@ class PortalDialogSnapshot:
     def combined_text(self) -> str:
         """Return title and message as one lower-case string."""
 
-        return f"{self.title} {self.message}".lower()
+        return normalize_portal_text(f"{self.title} {self.message}")
+
+    @property
+    def normalized_title(self) -> str:
+        """Return normalized dialog title."""
+
+        return normalize_portal_text(self.title)
+
+    @property
+    def normalized_message(self) -> str:
+        """Return normalized dialog message."""
+
+        return normalize_portal_text(self.message)
 
 
 @dataclass(frozen=True)
@@ -51,7 +65,17 @@ class PortalErrorSnapshot:
     def combined_text(self) -> str:
         """Return all messages in one lower-case string for keyword matching."""
 
-        return " ".join(self.messages).lower()
+        return normalize_portal_text(" ".join(self.messages))
+
+
+def normalize_portal_text(text: str) -> str:
+    """Normalize portal text for trim/case-insensitive matching."""
+
+    casefolded = str(text).casefold()
+    decomposed = unicodedata.normalize("NFKD", casefolded)
+    without_marks = "".join(char for char in decomposed if not unicodedata.combining(char))
+    turkish_normalized = without_marks.replace("ı", "i")
+    return re.sub(r"\s+", " ", turkish_normalized).strip()
 
 
 class PortalErrorDetector:
@@ -112,10 +136,12 @@ class PortalErrorDetector:
                     screenshot_path=screenshot_path,
                 )
                 logger.info(
-                    "Portal dialog algilandi | stage=%s title=%s message=%s screenshot=%s",
+                    "Portal dialog algilandi | stage=%s title=%s message=%s normalized_title=%s normalized_message=%s screenshot=%s",
                     stage,
                     title,
                     message,
+                    snapshot.normalized_title,
+                    snapshot.normalized_message,
                     screenshot_path,
                 )
                 return snapshot
@@ -151,10 +177,12 @@ class PortalErrorDetector:
     def _close_dialog(self, page: Any, dialog: PortalDialogSnapshot) -> None:
         try:
             page.get_by_role("button", name=PORTAL_DIALOG_OK_BUTTON_NAME).click(timeout=2_000)
+            self._wait_until_dialog_closed(page, dialog)
             logger.info(
-                "Portal dialog OK ile kapatildi | stage=%s title=%s",
+                "Portal dialog OK ile kapatildi | stage=%s title=%s normalized_title=%s",
                 dialog.stage,
                 dialog.title,
+                dialog.normalized_title,
             )
         except Exception:
             logger.exception(
@@ -162,6 +190,18 @@ class PortalErrorDetector:
                 dialog.stage,
                 dialog.title,
             )
+
+    def _wait_until_dialog_closed(self, page: Any, dialog: PortalDialogSnapshot) -> None:
+        try:
+            page.get_by_role("dialog", name=dialog.title).wait_for(state="hidden", timeout=2_000)
+            return
+        except Exception:
+            pass
+
+        try:
+            page.wait_for_timeout(300)
+        except Exception:
+            logger.debug("Dialog kapanisi sonrasi stabilizasyon beklemesi basarisiz", exc_info=True)
 
     def _raise_for_dialog(self, dialog: PortalDialogSnapshot) -> None:
         self._raise_for_text(
@@ -176,12 +216,12 @@ class PortalErrorDetector:
         stage: str,
         screenshot_path: str | None,
     ) -> None:
-        normalized = text.lower()
-        if TURMOB_SERVICE_ERROR_PATTERN.lower() in normalized:
+        normalized = normalize_portal_text(text)
+        if normalize_portal_text(TURMOB_SERVICE_ERROR_PATTERN) in normalized:
             raise TurmobServiceError(text, stage=stage, screenshot_path=screenshot_path)
-        if INVALID_TCKN_ERROR_PATTERN.lower() in normalized:
+        if normalize_portal_text(INVALID_TCKN_ERROR_PATTERN) in normalized:
             raise InvalidTCKNError(text, stage=stage, screenshot_path=screenshot_path)
-        if EFATURA_MUKELLEFI_ERROR_PATTERN.lower() in normalized:
+        if normalize_portal_text(EFATURA_MUKELLEFI_ERROR_PATTERN) in normalized:
             raise EFaturaMukellefiError(text, stage=stage, screenshot_path=screenshot_path)
         if text:
             raise UnknownPortalError(text, stage=stage, screenshot_path=screenshot_path)

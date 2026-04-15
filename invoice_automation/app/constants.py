@@ -29,3 +29,8 @@ TURMOB_SERVICE_ERROR_PATTERN = "Servis hatası oluştu"
 INVALID_TCKN_ERROR_PATTERN = "geçerli bir VKN/TCKN değeri değildir"
 EFATURA_MUKELLEFI_ERROR_PATTERN = "e-Fatura Mükellefine e-Arşiv Fatura Kesilemez"
 EARCHIVE_DRAFTS_PATH = "/EArchive/Drafts"
+EARCHIVE_DRAFTS_SUCCESS_TEXTS = (
+    "Taslaklar",
+    "E-Arşiv Taslaklar",
+    "e-Arşiv Taslaklar",
+)

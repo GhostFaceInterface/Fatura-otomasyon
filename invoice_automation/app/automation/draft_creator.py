@@ -11,7 +11,7 @@ from invoice_automation.app.automation.invoice_form_filler import InvoiceFormDat
 from invoice_automation.app.automation.portal_navigation import EArchiveNavigation
 from invoice_automation.app.automation.portal_selectors import PortalSelectors, portal_selectors
 from invoice_automation.app.config import settings
-from invoice_automation.app.constants import EARCHIVE_DRAFTS_PATH, InvoiceStatus
+from invoice_automation.app.constants import EARCHIVE_DRAFTS_PATH, EARCHIVE_DRAFTS_SUCCESS_TEXTS, InvoiceStatus
 from invoice_automation.app.db.models import InvoiceRecord
 from invoice_automation.app.utils.exceptions import DraftCreationError, ElementNotFoundError, PortalTimeoutError
 from invoice_automation.app.utils.screenshots import capture_error_screenshot
@@ -100,9 +100,37 @@ class DraftCreator:
                 stage="draft_redirect_wait",
                 record_id=record_id,
             )
+            if self._has_drafts_page_success_signal(page):
+                logger.info(
+                    "Taslak sayfasi ikincil basari sinyaliyle dogrulandi | record_id=%s",
+                    record_id,
+                )
+                return
             screenshot_path = capture_error_screenshot(page, record_id, "draft_redirect_timeout")
             raise PortalTimeoutError(
                 f"Taslak kayit sonrasi {EARCHIVE_DRAFTS_PATH} redirect'i gelmedi.",
                 stage="draft_redirect_wait",
                 screenshot_path=screenshot_path,
             ) from exc
+
+    def _has_drafts_page_success_signal(self, page: Any) -> bool:
+        for text in EARCHIVE_DRAFTS_SUCCESS_TEXTS:
+            if self._is_text_visible(page, text):
+                return True
+            if self._is_heading_visible(page, text):
+                return True
+        return False
+
+    def _is_text_visible(self, page: Any, text: str) -> bool:
+        try:
+            page.get_by_text(text).wait_for(state="visible", timeout=2_000)
+            return True
+        except Exception:
+            return False
+
+    def _is_heading_visible(self, page: Any, text: str) -> bool:
+        try:
+            page.get_by_role("heading", name=text).wait_for(state="visible", timeout=2_000)
+            return True
+        except Exception:
+            return False

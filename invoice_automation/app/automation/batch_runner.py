@@ -181,7 +181,7 @@ class BatchRunner:
         if page is None or self._page_is_closed(page):
             return
         try:
-            page.wait_for_timeout(500)
+            page.wait_for_timeout(settings.retry_backoff_base_ms)
         except Exception:
             return
 

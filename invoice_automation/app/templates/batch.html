@@ -29,6 +29,13 @@
   <div class="alert inline-error">Batch baslatmak icin once bir fatura donemi olusturun.</div>
   {% endif %}
 
+  <div class="session-banner {{ 'ready' if session_ready else 'blocked' }}">
+    <strong>Session:</strong> {{ session_state.status }} · {{ session_state.message }}
+    {% if not session_ready %}
+    <a class="button-link secondary compact" href="/session">Session Baslat</a>
+    {% endif %}
+  </div>
+
   {% if prepared %}
   <div class="alert inline-success">
     Batch hazirlandi. Toplam secili kayit: <strong>{{ preview.total_selected }}</strong>.
@@ -65,10 +72,14 @@
     {% if active_batch %}
     <input type="hidden" name="batch_id" value="{{ active_batch.id }}">
     {% endif %}
-    <button type="submit" {% if preview.total_selected == 0 or not active_batch %}disabled{% endif %}>
+    <button type="submit" {% if preview.total_selected == 0 or not active_batch or not session_ready %}disabled{% endif %}>
       Secilileri Taslak Olustur
     </button>
   </form>
+
+  {% if not session_ready %}
+  <p class="muted">Batch calistirmadan once session durumunun <code>READY</code> olmasi gerekir.</p>
+  {% endif %}
 
   {% if preview.total_selected == 0 %}
   <p class="muted">Batch hazirlamak icin once kayit ekranindan en az bir PENDING kayit secin.</p>
@@ -143,6 +154,12 @@
   </table>
 
   <h3>Kayit Detaylari</h3>
+  <div class="filters report-filters" data-report-filter-root>
+    <button type="button" class="secondary-button active" data-report-filter="all">Tum Detaylar</button>
+    <button type="button" class="secondary-button" data-report-filter="failed">Failed</button>
+    <button type="button" class="secondary-button" data-report-filter="skipped">Skip</button>
+    <button type="button" class="secondary-button" data-report-filter="screenshots">Screenshot Olanlar</button>
+  </div>
   <table>
     <thead>
       <tr>
@@ -156,7 +173,7 @@
     </thead>
     <tbody>
       {% for detail in report.details %}
-      <tr>
+      <tr data-report-row data-status="{{ detail.final_status }}" data-screenshot="{{ '1' if detail.screenshot_path else '0' }}">
         <td>{{ detail.record_id }}</td>
         <td>{{ detail.full_name }}</td>
         <td>{{ detail.tc_kimlik_no }}</td>
@@ -203,4 +220,25 @@
     </tbody>
   </table>
 </section>
+
+<script>
+  document.querySelectorAll("[data-report-filter]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const filter = button.dataset.reportFilter;
+      document.querySelectorAll("[data-report-filter]").forEach((candidate) => {
+        candidate.classList.toggle("active", candidate === button);
+      });
+      document.querySelectorAll("[data-report-row]").forEach((row) => {
+        const status = row.dataset.status || "";
+        const hasScreenshot = row.dataset.screenshot === "1";
+        const visible =
+          filter === "all" ||
+          (filter === "failed" && status.startsWith("FAILED_")) ||
+          (filter === "skipped" && status.startsWith("SKIPPED_")) ||
+          (filter === "screenshots" && hasScreenshot);
+        row.hidden = !visible;
+      });
+    });
+  });
+</script>
 {% endblock %}

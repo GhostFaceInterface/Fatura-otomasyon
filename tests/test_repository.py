@@ -77,6 +77,36 @@ def test_repository_filters_by_status(tmp_path: Path) -> None:
     assert len(repository.list_all(status=InvoiceStatus.FAILED_UNKNOWN)) == 0
 
 
+def test_repository_searches_records_inside_batch(tmp_path: Path) -> None:
+    repository = InvoiceRecordRepository(tmp_path / "test.sqlite3")
+    batch = repository.create_import_batch(
+        ImportBatchCreate(name="Nisan", source_file_name="nisan.xlsx", sheet_name="Sayfa1")
+    )
+    repository.create(
+        InvoiceRecordCreate(
+            batch_id=batch.id,
+            ad="Ali",
+            soyad="Yilmaz",
+            tc_kimlik_no="12345678901",
+            tutar_usd=1500.0,
+        )
+    )
+    repository.create(
+        InvoiceRecordCreate(
+            batch_id=batch.id,
+            ad="Ayse",
+            soyad="Demir",
+            tc_kimlik_no="10987654321",
+            tutar_usd=2200.0,
+        )
+    )
+
+    records = repository.list_all(batch_id=batch.id, search="109876")
+
+    assert len(records) == 1
+    assert records[0].ad == "Ayse"
+
+
 def test_repository_updates_selection_statuses(tmp_path: Path) -> None:
     repository = InvoiceRecordRepository(tmp_path / "test.sqlite3")
     first = repository.create(

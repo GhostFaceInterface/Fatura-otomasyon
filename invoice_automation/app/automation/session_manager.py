@@ -27,9 +27,11 @@ class PortalSessionStatus(StrEnum):
     """Observable session states for UI and API responses."""
 
     IDLE = "IDLE"
+    BROWSER_OPENING = "BROWSER_OPENING"
     BROWSER_STARTED = "BROWSER_STARTED"
     LOGIN_PAGE_OPENED = "LOGIN_PAGE_OPENED"
     LOGIN_FORM_FILLED = "LOGIN_FORM_FILLED"
+    LOGIN_SUBMITTED = "LOGIN_SUBMITTED"
     TWO_FACTOR_WAITING = "TWO_FACTOR_WAITING"
     READY = "READY"
     FAILED = "FAILED"
@@ -87,6 +89,7 @@ class PortalSessionManager:
         """Open the portal, fill credentials, and wait until the 2FA page."""
 
         self._ensure_credentials()
+        self._set_state(PortalSessionStatus.BROWSER_OPENING, "Browser aciliyor.", None)
         page = self.browser_manager.start()
         self._set_state(PortalSessionStatus.BROWSER_STARTED, "Browser acildi.", page)
 
@@ -114,6 +117,11 @@ class PortalSessionManager:
 
             page.get_by_role("button", name=self.selectors.login_button_name).click()
             logger.info("Giris butonuna tiklandi")
+            self._set_state(
+                PortalSessionStatus.LOGIN_SUBMITTED,
+                "Login gonderildi; 2FA veya dashboard sinyali bekleniyor.",
+                page,
+            )
 
             post_login_status = self._wait_for_post_login_state(page)
         except PortalSessionError:
@@ -200,8 +208,13 @@ class PortalSessionManager:
             except Exception:
                 break
 
-        self._fail("Login sonrasi 2FA veya session ready sinyali algilanamadi.", page)
-        raise TwoFactorTimeoutError("Login sonrasi 2FA veya session ready sinyali algilanamadi.")
+        timeout_seconds = int(self.settings.playwright_timeout_ms / 1_000)
+        message = (
+            "Login sonrasi 2FA veya session ready sinyali algilanamadi. "
+            f"{timeout_seconds} saniye icinde VerificationUser, Home/Index veya e-Arsiv menu gorunmedi."
+        )
+        self._fail(message, page)
+        raise TwoFactorTimeoutError(message)
 
     def _is_two_factor_code_visible(self, page: Any) -> bool:
         try:
@@ -234,12 +247,7 @@ class PortalSessionManager:
     def _looks_logged_in_by_url(self, current_url: str) -> bool:
         if not current_url:
             return False
-        if self.selectors.home_index_url_marker in current_url:
-            return True
-        return (
-            self.selectors.verification_url_marker not in current_url
-            and current_url.rstrip("/") != self.settings.portal_login_url.rstrip("/")
-        )
+        return self.selectors.home_index_url_marker in current_url
 
     def _safe_current_url(self, page: Any | None) -> str | None:
         if page is None:

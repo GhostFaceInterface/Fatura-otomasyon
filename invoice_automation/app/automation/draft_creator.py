@@ -45,6 +45,7 @@ class DraftCreator:
         self.error_detector = error_detector or PortalErrorDetector()
         self.selectors = selectors
         self.timeout_ms = timeout_ms or settings.playwright_timeout_ms
+        self.redirect_timeout_ms = settings.redirect_wait_timeout_ms
 
     def create_draft(self, page: Any, record: InvoiceRecord) -> DraftCreationResult:
         """Create a draft invoice for exactly one record."""
@@ -92,7 +93,7 @@ class DraftCreator:
 
     def _wait_for_success_redirect(self, page: Any, record_id: int) -> None:
         try:
-            page.wait_for_url(f"**{EARCHIVE_DRAFTS_PATH}*", timeout=self.timeout_ms)
+            page.wait_for_url(f"**{EARCHIVE_DRAFTS_PATH}*", timeout=self.redirect_timeout_ms)
             logger.info("Taslak redirect dogrulandi | record_id=%s path=%s", record_id, EARCHIVE_DRAFTS_PATH)
         except Exception as exc:
             self.error_detector.raise_if_portal_error(

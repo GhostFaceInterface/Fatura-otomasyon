@@ -1,96 +1,65 @@
 # e-Arsiv Fatura Otomasyonu
 
-Lokal bilgisayarda calisan, e-Arsiv taslak fatura olusturma surecini yari otomatik hale getirmek icin gelistirilen Python uygulamasi.
+Lokal bilgisayarda calisan, Excel/CSV verilerinden e-Arsiv taslak fatura olusturma surecini yari otomatik hale getiren Python uygulamasi.
 
-Faz 1-6 ve Faz 7 oncesi kritik tamamlamalar kapsaminda uygulama veri import eder, her importu ayri fatura donemi olarak SQLite'a kaydeder, Excel sheet ve kolon mapping secimi sunar, kayitlari aktif donem bazinda listeler, PENDING kayitlari secilebilir hale getirir, Playwright ile portal login + manuel veya 2FA'siz session akisini yonetir, tek kayit icin e-Arsiv taslak POC olusturur ve aktif donemdeki secili uygun kayitlari sirali batch olarak isleyip sonuc raporu uretir.
+## 1. Proje Amaci
 
-## Ozellikler
+Bu proje, manuel olarak tekrar edilen e-Arsiv taslak fatura hazirlama adimlarini lokal bir web panel ve Playwright browser otomasyonu ile azaltmak icin gelistirildi. Sistem veriyi import eder, kayitlari fatura donemi altinda saklar, kullanicinin sectigi kisiler icin portala girerek taslak olusturur ve hata alan kayitlari anlamli statuslerle raporlar.
 
-- CSV ve Excel dosyasindan kayit importu
-- Excel sheet secimi
-- Kullanici kontrollu kolon mapping
-- Her import icin ayri fatura donemi / import batch kaydi
-- Minimum kolon validasyonu
-- TCKN format kontrolu
-- Pozitif USD tutar kontrolu
-- Hatalı satirlari atlayip gecerli satirlari kaydetme
-- SQLite ile lokal veri saklama
-- FastAPI + Jinja2 ile sade lokal web panel
-- JSON API saglik kontrolu ve kayit listesi
-- Kalici kayit secimi
-- Aktif fatura donemi bazli kayit listeleme ve batch isleme
-- Tumunu sec checkbox'i
-- Batch hazirlik, sirali batch isleme ve sonuc raporu
-- Headful Playwright browser session yonetimi
-- Portal login formunu .env credential'lari ile otomatik doldurma
-- Manuel 2FA veya dogrudan `/Home/Index` sonrasi session hazir kontrolu
-- Tek kayit icin e-Arsiv taslak POC
-- Secili PENDING/SELECTED kayitlari toplu taslak isleme
-- Draft sonucunu SQLite status/hata alanlarina yazma
-- Gercek portal hata dialoglarini status/exception'a map etme
-- Kayit bazli hatalarda batch'e devam etme
-- Turmob sonrasi ad/soyad dogrulama ve `FAILED_NAME_MISMATCH` statusu
-- Kritik session/navigation hatasinda batch'i guvenli durdurma
-- Hata aninda screenshot alma
-- Uygulama loglari
+## 2. Sistem Ne Yapar / Ne Yapmaz
 
-## Klasor Yapisi
+Yapar:
 
-```text
-invoice_automation/
-├── app/
-│   ├── config.py
-│   ├── constants.py
-│   ├── db/
-│   ├── routes/
-│   ├── schemas/
-│   ├── services/
-│   ├── templates/
-│   ├── static/
-│   └── utils/
-├── data/
-│   ├── imports/
-│   ├── processed/
-│   └── logs/
-├── memory-bank/
-├── tests/
-├── .env.example
-├── requirements.txt
-└── run.py
-```
+- Excel/CSV import eder.
+- Excel sheet secimi ve kolon mapping sunar.
+- Her importu ayri fatura donemi olarak saklar.
+- Kayitlari aktif fatura donemine gore listeler.
+- Kayit secimi ve tumunu sec davranisini destekler.
+- Headful Playwright browser acip login formunu doldurur.
+- 2FA varsa kullaniciyi manuel kod girisi icin bekletir.
+- 2FA yoksa `/Home/Index` veya e-Arsiv menu sinyali ile session hazir kabul eder.
+- Tek kayit ve secili coklu kayit icin taslak e-Arsiv fatura olusturma akisini calistirir.
+- Invalid TCKN, Turmob servis hatasi, e-Fatura mukellefi ve ad/soyad uyusmazligi gibi durumlari statuslere map eder.
+- Hata aninda log ve screenshot uretir.
 
-## Kurulum
+Yapmaz:
 
-Python 3.11 veya daha yeni bir surum kullanin.
+- GIB'e otomatik gonderim yapmaz.
+- Muhasebe sistemi veya uzak sunucu deployment saglamaz.
+- Cok kullanicili rol/yetki sistemi kurmaz.
+- Hata alan kayitlari otomatik yeniden deneme workflow'una sokmaz.
+
+## 3. Kurulum
+
+Python 3.11+ kullanin.
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-```
-
-Faz 3 icin Playwright tarayici kurulumu gerekir:
-
-```bash
 playwright install chromium
 ```
 
-## .env Ayari
+## 4. .env Ayarlari
 
 ```bash
 cp .env.example .env
 ```
 
-Faz 3/Faz 4 icin portal login ve taslak POC alanlarini `.env` icinde doldurun:
+Temel alanlar:
 
 ```text
 PORTAL_LOGIN_URL=https://portal.hizliteknoloji.com.tr/
 PORTAL_2FA_URL=https://portal.hizliteknoloji.com.tr/User/VerificationUser?verificationType=Mail
-PORTAL_USERNAME=...
-PORTAL_PASSWORD=...
+PORTAL_USERNAME=
+PORTAL_PASSWORD=
 PLAYWRIGHT_HEADLESS=false
 PLAYWRIGHT_TIMEOUT_MS=30000
 NAVIGATION_RETRY_COUNT=2
+FIELD_WAIT_TIMEOUT_MS=30000
+REDIRECT_WAIT_TIMEOUT_MS=30000
+TURMOB_LOOKUP_RETRY_COUNT=2
+RETRY_BACKOFF_BASE_MS=500
 MAL_HIZMET_ADI=YURT DIŞI KONAKLAMA BEDELİ
 PARA_BIRIMI=USD
 KDV_ORANI=0
@@ -100,80 +69,135 @@ DEFAULT_IL=**
 DEFAULT_ILCE=**
 ```
 
-2FA kodu `.env` icinde tutulmaz. Kod kullanici tarafindan acik browser uzerinden manuel girilir.
+2FA kodu `.env` icinde tutulmaz. Kod acik browser uzerinden kullanici tarafindan girilir.
 
-## Calistirma
+## 5. Uygulamayi Calistirma
 
 ```bash
 python run.py
 ```
 
-Ardindan tarayicida acin:
+Panel:
 
 ```text
 http://127.0.0.1:8000
 ```
 
-## Veri Formati
+## 6. Excel Import Akisi
 
-Import mapping ekraninda minimum su alanlar eslestirilir:
+1. `/` ekraninda Excel veya CSV dosyasini yukleyin.
+2. Excel dosyasinda kullanilacak sheet'i secin.
+3. Kolon mapping ekraninda zorunlu alanlari eslestirin.
+4. Fatura donemi / batch adi verin.
+5. Importu onaylayin.
 
-```text
-ad,soyad,tc_kimlik_no,tutar_usd
-```
+## 7. Sheet Secimi
 
-`aciklama` opsiyoneldir. Otomatik alias mapping fallback olarak korunur.
+Excel dosyasi birden fazla sheet iceriyorsa sistem sheet listesini okur. Kullanici import edilecek sheet'i secer ve kolon listesi secilen sheet'e gore yenilenir.
 
-Ornek CSV:
+## 8. Kolon Mapping
 
-```csv
-ad,soyad,tc_kimlik_no,tutar_usd,aciklama
-Ali,Yilmaz,12345678901,1500,Yurt disi konaklama
-Ayse,Demir,10987654321,2200,Umre hizmeti
-```
+Zorunlu alanlar:
 
-Desteklenen dosya tipleri:
+- `ad`
+- `soyad`
+- `tc_kimlik_no`
+- `tutar_usd`
 
-- `.csv`
-- `.xlsx`
-- `.xls`
+Opsiyonel alan:
 
-## Ekranlar
+- `aciklama`
 
-- `/` dosya yukleme ekrani
-- `/import/inspect` sheet kolonlarini yeniden yukleme
-- `/import/confirm` mapping + fatura donemi ile import
-- `/records?batch_id=1` aktif fatura donemi kayit listesi
-- `/records?batch_id=1&status=PENDING` durum filtresi
-- `/batch?batch_id=1` aktif fatura doneminde secili kayitlar icin batch hazirlik ekrani
-- `/batch/run` secili uygun kayitlari batch olarak isleme
-- `/session` browser login ve 2FA session ekrani
-- `/draft` tek kayit e-Arsiv taslak POC ekrani
-- `/api/health` saglik kontrolu
-- `/api/records` JSON kayit listesi
-- `/api/batch/preview` JSON batch preview
-- `/api/batch/run` JSON batch run raporu
-- `/api/session/status` JSON session durumu
-- `/api/session/start` browser login baslatma
-- `/api/session/verify` manuel 2FA sonrasi session kontrolu
-- `/api/session/close` browser session kapatma
-- `/api/draft/create?record_id=1` tek kayit draft POC
+Otomatik alias mapping fallback olarak korunur, ancak operasyonel kullanimda kullanici kontrollu mapping tercih edilir.
 
-## Bilinen Limitler
+## 9. Fatura Donemi / Batch Mantigi
 
-- Kolon mapping ekrani vardir; otomatik alias mapping fallback olarak korunur.
-- TCKN kontrolu format seviyesindedir; resmi checksum validasyonu yoktur.
-- Batch run sadece aktif fatura donemi icindeki secili ve durumu PENDING/SELECTED olan kayitlari isler.
-- Basari/hata/skip durumundaki kayitlar bu fazda otomatik yeniden denenmez.
-- Batch calismasi siralidir; dagitik job queue veya websocket yoktur.
-- Invalid TCKN, Turmob servis hatasi ve e-Fatura mukellefi dialoglari yakalanir.
+Her import `import_batches` tablosunda ayri bir fatura donemi olusturur. `invoice_records.batch_id` ile kayitlar ilgili doneme baglanir.
 
-## Guvenlik Notlari
+Records ve batch ekranlari aktif fatura donemi baglaminda calisir. Eski donemde secili kalmis kayitlar yeni donem batch islemini etkilemez.
 
-- Portal kullanici adi ve sifresi `.env` icinde tutulmalidir.
-- `.env` dosyasi repoya commit edilmemelidir.
-- Uygulama lokal calisma hedefiyle tasarlanmistir.
-- Faz 1'de GIB'e gonderim veya taslak fatura olusturma yoktur.
+## 10. Session Baslatma
+
+`/session` ekraninda:
+
+1. `Tarayiciyi Ac / Login Baslat` butonuna basin.
+2. Sistem portali acar, kullanici adi ve sifreyi `.env` uzerinden doldurur.
+3. Login sonrasi durum panelde guncellenir.
+
+## 11. 2FA'li / 2FA'siz Login Davranisi
+
+Login sonrasi uc sinyal izlenir:
+
+- 2FA sayfasi: `/User/VerificationUser`
+- Basarili dashboard: `/Home/Index`
+- e-Arsiv menu linki
+
+2FA sayfasi gelirse kullanici kodu manuel girer ve panelde session kontrolu calistirilir. `/Home/Index` veya e-Arsiv menu gorunurse session `READY` kabul edilir.
+
+## 12. Kayit Secme
+
+`/records?batch_id=...` ekraninda aktif fatura donemine ait kayitlar listelenir. Sadece `PENDING` ve `SELECTED` kayitlar secilebilir. Header'daki `Tumunu Sec` checkbox'i yalnizca gorunur ve uygun checkboxlari etkiler.
+
+## 13. Toplu Taslak Olusturma
+
+`/batch?batch_id=...` ekraninda:
+
+1. Aktif fatura donemini kontrol edin.
+2. Session durumunun `READY` oldugunu dogrulayin.
+3. Secili uygun kayit sayisini kontrol edin.
+4. `Secilileri Taslak Olustur` butonuna basin.
+
+Batch siralidir. Kayit bazli hatalarda sonraki kayda gecilir. Session veya navigation kritik hatasinda batch guvenli sekilde durur.
+
+## 14. Hata Statusleri
+
+- `PENDING`: import edildi, islem bekliyor.
+- `SELECTED`: kullanici tarafindan batch icin secildi.
+- `IN_PROGRESS`: kayit isleniyor.
+- `SUCCESS_DRAFT_CREATED`: taslak basariyla olustu.
+- `FAILED_INVALID_TCKN`: VKN/TCKN formati veya portal validasyonu gecersiz.
+- `FAILED_NAME_MISMATCH`: Turmob ad/soyad ile lokal kayit eslesmedi.
+- `FAILED_TURMOB_SERVICE_ERROR`: Turmob servis hatasi alindi.
+- `SKIPPED_EFATURA_MUKELLEFI`: kisi e-Fatura mukellefi oldugu icin e-Arsiv kesilemedi.
+- `FAILED_PORTAL_TIMEOUT`: portal elementi, redirect veya navigation timeout oldu.
+- `FAILED_UNKNOWN`: siniflandirilmamis hata.
+- `ABORTED_SESSION_LOST`: session/browser kritik nedenle kaybedildi.
+
+## 15. Screenshot ve Loglar
+
+- Uygulama logu: `data/logs/app.log`
+- Hata screenshotlari: `data/logs/screenshots/`
+- Veritabani: `data/invoice_automation.sqlite3`
+
+Batch raporunda screenshot path gorunuyorsa ilgili kaydin hata anindaki ekran goruntusu incelenmelidir.
+
+## 16. Bilinen Sinirlamalar
+
+- Portal selectorlari gercek portala baglidir; portal UI degisirse guncelleme gerekir.
+- TCKN dogrulamasi import sirasinda format seviyesindedir.
+- Batch sirali calisir; websocket, queue veya paralel isleme yoktur.
+- Basarili/hata/skip kayitlar otomatik yeniden denenmez.
+- Bu uygulama sadece lokal kullanim icin tasarlanmistir.
+
+## 17. Guvenlik Notlari
+
+- `.env` repoya commit edilmemelidir.
+- Portal sifresi sadece lokal `.env` dosyasinda tutulmalidir.
+- Uygulama headful browser kullanir; 2FA kodu otomatik cozulmez.
+- Canli kullanim oncesi kucuk test batch'i ile dogrulama yapin.
+
+## 18. Canli Kullanim Oncesi Checklist
+
+1. `.env` credential alanlari dogru mu?
+2. Excel dosyasi dogru mu?
+3. Sheet ve kolon mapping dogru mu?
+4. Fatura donemi adi dogru mu?
+5. Records ekraninda sadece aktif donem kayitlari mi gorunuyor?
+6. Secili kayit sayisi beklenen sayi mi?
+7. Session durumu `READY` mi?
+8. Ilk deneme kucuk kayit grubu ile yapildi mi?
+9. Batch sonrasi success/fail/skip dagilimi kontrol edildi mi?
+10. Hata screenshot ve loglari incelendi mi?
 
 ## Test
 
@@ -181,58 +205,4 @@ Desteklenen dosya tipleri:
 pytest
 ```
 
-## Manuel Test Checklist
-
-1. Sanal ortam olusturun ve bagimliliklari yukleyin.
-2. `.env.example` dosyasini `.env` olarak kopyalayin.
-3. `python run.py` komutunu calistirin.
-4. `http://127.0.0.1:8000` adresini acin.
-5. Gecerli CSV veya Excel dosyasi yukleyin.
-6. Excel icin sheet secin, kolon mapping yapin ve fatura donemi adi verin.
-7. Import sonrasi kayitlarin `/records?batch_id=...` ekraninda sadece ilgili donemde gorundugunu kontrol edin.
-8. PENDING kayitlardan bir veya daha fazlasini secip `Secimi Kaydet` butonuna basin.
-9. Header'daki `Tumunu Sec` checkbox'i ile uygun kayitlarin topluca secilebildigini kontrol edin.
-10. Secilen kayitlarin SELECTED durumuna gectigini kontrol edin.
-11. `/batch?batch_id=...` ekraninda secili kayit sayisini ve toplam USD tutarini kontrol edin.
-12. `/session` ekraninda `Tarayiciyi Ac / Login Baslat` butonuna basin.
-13. Browser'in acildigini, login alanlarinin doldugunu ve 2FA varsa 2FA ekranina geldigini kontrol edin.
-14. 2FA yoksa `/Home/Index` sonrasi durumun dogrudan `READY` oldugunu kontrol edin.
-15. 2FA varsa kodu acik browser'da manuel girip dogrulayin ve panelde `2FA Tamam, Session Kontrol Et` butonuna basin.
-16. Durumun `READY` oldugunu kontrol edin.
-17. `/draft` ekranina gidin.
-18. Tek bir kayit icin `Taslak POC Olustur` butonuna basin.
-19. Portalda e-Arsiv olustur sayfasinin acildigini, USD secildigini, kur getir aksiyonunun tetiklendigini, TCKN ve kalem bilgilerinin doldugunu kontrol edin.
-20. Turmob sonrasi portal ad/soyadinin SQLite ad/soyadiyla eslestigini kontrol edin.
-21. `Taslak Kaydet` butonuna basildigini ve kaydin `SUCCESS_DRAFT_CREATED` veya anlamli hata statusune gectigini kontrol edin.
-22. Gecersiz TCKN formatinda `geçerli bir VKN/TCKN değeri değildir` dialogunun `FAILED_INVALID_TCKN` yazdigini kontrol edin.
-23. Turmob servis hatasinda `Servis hatası oluştu` dialogunun `FAILED_TURMOB_SERVICE_ERROR` yazdigini kontrol edin.
-24. e-Fatura mukellefi kiside `e-Fatura Mükellefine e-Arşiv Fatura Kesilemez` dialogunun `SKIPPED_EFATURA_MUKELLEFI` yazdigini kontrol edin.
-25. Turmob ad/soyad uyusmazliginda `FAILED_NAME_MISMATCH` yazildigini kontrol edin.
-26. Hata aninda dialogun OK ile kapandigini ve `data/logs/screenshots/` altina screenshot yazildigini kontrol edin.
-27. `/batch?batch_id=...` ekraninda `Secilileri Taslak Olustur` butonuna basin.
-28. Birden fazla secili kaydin sirayla islenip sonuc raporunda success/failed/skipped sayilarinin gorundugunu kontrol edin.
-29. Bir kayit hata verdiginde sonraki kayda gecildigini kontrol edin.
-30. Session kapanirsa batch'in kritik abort raporuyla guvenli durdugunu kontrol edin.
-31. Eksik kolon mapping ile import deneyip anlasilir hata mesajini kontrol edin.
-32. `data/invoice_automation.sqlite3` dosyasinin olustugunu kontrol edin.
-33. `data/logs/app.log` dosyasina log yazildigini kontrol edin.
-
-## Portal Hata Patternleri
-
-Kodda merkezi tutulan dialog basliklari ve mesaj patternleri:
-
-- Dialog basliklari: `Hata Oluştu`, `Bilgi`
-- Turmob servis hatasi: `Servis hatası oluştu`
-- Gecersiz VKN/TCKN: `geçerli bir VKN/TCKN değeri değildir`
-- e-Fatura mukellefi: `e-Fatura Mükellefine e-Arşiv Fatura Kesilemez`
-- Basari redirect: `/EArchive/Drafts`
-
-## Gelecek Fazlar
-
-- Faz 2: kayit secimi, durum yonetimi ve batch hazirligi tamamlandi
-- Faz 3: Playwright browser session ve login + 2FA akisi tamamlandi
-- Faz 4: tek kayit icin taslak olusturma POC tamamlandi
-- Faz 5: hata senaryolari ve screenshot/log iyilestirmeleri tamamlandi
-- Faz 6: coklu batch isleme ve sonuc raporu tamamlandi
-- Faz 7 oncesi kritik operasyonel eksikler: fatura donemi izolasyonu, sheet/mapping import, 2FA'siz login, tumunu sec ve Turmob ad/soyad kontrolu tamamlandi
-- Faz 7: sertlestirme, refactor ve UI iyilestirmeleri
+Detayli operasyon adimlari icin `docs/USAGE_GUIDE.md`, kontrol listeleri icin `docs/OPERATIONS_CHECKLIST.md` dosyasina bakin.

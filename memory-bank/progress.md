@@ -125,6 +125,33 @@ Notlar:
 - Otomatik kolon alias mapping kaldirilmadi; explicit UI mapping birinci sinif akisa eklendi.
 - Name mismatch kayit bazli hata kabul edilir, batch'i durdurmaz.
 
+## Faz 7 / Son Faz Hardening
+
+Tamamlandi:
+
+- Session state bilgisi UI'da daha okunabilir hale getirildi.
+- Batch ekraninda session durumu gorunur hale geldi.
+- Session READY degilken batch run butonu UI'da disable edilir.
+- Login sonrasi hazirlik kontrolu `/Home/Index` veya e-Arsiv menu sinyaline dayandirildi.
+- `FIELD_WAIT_TIMEOUT_MS`, `REDIRECT_WAIT_TIMEOUT_MS`, `TURMOB_LOOKUP_RETRY_COUNT`, `RETRY_BACKOFF_BASE_MS` config alanlari eklendi.
+- Merkezi `retry_with_backoff` helper eklendi.
+- e-Arsiv olustur formu hazir kontrolu birden fazla kritik alanla yapilir.
+- Sonraki kayit icin yeni olustur sayfasina donus retry/backoff ile sertlestirildi.
+- Kur getir/Turmob tiklama ve Turmob ad/soyad alanlarini okuma daha dayanikli hale getirildi.
+- Draft success redirect bekleme suresi ayri config ile yonetilir.
+- Records ekranina aktif batch icinde ad/soyad/TCKN aramasi eklendi.
+- Batch rapor detaylarina failed/skip/screenshot filtreleri eklendi.
+- README operasyon odakli yeniden yazildi.
+- `docs/USAGE_GUIDE.md` kullanici kilavuzu eklendi.
+- `docs/OPERATIONS_CHECKLIST.md` operasyon checklist dosyasi eklendi.
+- Test paketi 52 test ile basarili calisti.
+
+Notlar:
+
+- Buyuk mimari refactor yapilmadi.
+- GIB gonderimi, queue, websocket veya otomatik yeniden deneme workflow'u eklenmedi.
+- Sonraki adim canli ortamda kucuk pilot batch ile portal selector ve timing davranisini dogrulamaktir.
+
 Henuz tamamlanmayan sonraki isler:
 
-- Faz 7: sertlestirme ve dokumantasyon iyilestirme
+- Canli pilot sonrasi portal UI'da degisen selector veya metinler varsa kucuk uyarlama.

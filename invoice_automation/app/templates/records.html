@@ -25,6 +25,9 @@
     {% if selected_status %}
     <input type="hidden" name="status" value="{{ selected_status }}">
     {% endif %}
+    {% if search_query %}
+    <input type="hidden" name="q" value="{{ search_query }}">
+    {% endif %}
     <button type="submit" class="secondary-button">Donemi Ac</button>
   </form>
 
@@ -41,18 +44,36 @@
   {% endif %}
 
   <div class="filters">
-    <a class="{{ 'active' if not selected_status else '' }}" href="/records{% if active_batch %}?batch_id={{ active_batch.id }}{% endif %}">Tum Durumlar</a>
+    <a class="{{ 'active' if not selected_status else '' }}" href="/records{% if active_batch %}?batch_id={{ active_batch.id }}{% if search_query %}&q={{ search_query|urlencode }}{% endif %}{% endif %}">Tum Durumlar</a>
     {% for status in statuses %}
-      <a class="{{ 'active' if selected_status == status else '' }}" href="/records?{% if active_batch %}batch_id={{ active_batch.id }}&{% endif %}status={{ status }}">{{ status }}</a>
+      <a class="{{ 'active' if selected_status == status else '' }}" href="/records?{% if active_batch %}batch_id={{ active_batch.id }}&{% endif %}status={{ status }}{% if search_query %}&q={{ search_query|urlencode }}{% endif %}">{{ status }}</a>
     {% endfor %}
   </div>
+
+  <form class="upload-form" action="/records" method="get">
+    {% if active_batch %}
+    <input type="hidden" name="batch_id" value="{{ active_batch.id }}">
+    {% endif %}
+    {% if selected_status %}
+    <input type="hidden" name="status" value="{{ selected_status }}">
+    {% endif %}
+    <label for="q">Aktif donemde ara</label>
+    <input id="q" type="text" name="q" value="{{ search_query }}" placeholder="Ad, soyad veya TCKN">
+    <button type="submit" class="secondary-button">Ara</button>
+    {% if search_query and active_batch %}
+    <a class="button-link secondary" href="/records?batch_id={{ active_batch.id }}{% if selected_status %}&status={{ selected_status }}{% endif %}">Aramayi Temizle</a>
+    {% endif %}
+  </form>
 
   <form action="/records/selection" method="post">
     {% if active_batch %}
     <input type="hidden" name="batch_id" value="{{ active_batch.id }}">
     {% endif %}
     <div class="table-actions">
-      <div>Secili kayit sayisi: <strong>{{ selected_count }}</strong></div>
+      <div>
+        Gorunen kayit: <strong>{{ records|length }}</strong>
+        · Secili uygun kayit: <strong>{{ selected_count }}</strong>
+      </div>
       <button type="submit" {% if not active_batch %}disabled{% endif %}>Secimi Kaydet</button>
     </div>
 

@@ -147,14 +147,18 @@ def confirm_import(
 
 
 @router.get("/records", response_class=HTMLResponse)
-def records(request: Request, status: str | None = Query(default=None)) -> HTMLResponse:
+def records(
+    request: Request,
+    status: str | None = Query(default=None),
+    q: str | None = Query(default=None),
+) -> HTMLResponse:
     """Render invoice records as a table."""
 
     repository = InvoiceRecordRepository()
     active_batch = _active_batch(repository, request.query_params.get("batch_id"))
     active_batch_id = active_batch.id if active_batch else None
     invoice_records = (
-        repository.list_all(status=status, batch_id=active_batch_id)
+        repository.list_all(status=status, batch_id=active_batch_id, search=q)
         if active_batch_id is not None
         else []
     )
@@ -168,6 +172,7 @@ def records(request: Request, status: str | None = Query(default=None)) -> HTMLR
             "batches": repository.list_import_batches(),
             "active_batch": active_batch,
             "selected_status": status,
+            "search_query": q or "",
             "statuses": statuses,
             "selected_count": selected_count,
             "selection_saved": request.query_params.get("selection_saved") == "1",
@@ -210,6 +215,8 @@ def batch(request: Request) -> HTMLResponse:
             "active_batch": active_batch,
             "prepared": False,
             "report": None,
+            "session_state": portal_session_manager.state,
+            "session_ready": portal_session_manager.state.status == "READY",
         },
     )
 
@@ -230,6 +237,8 @@ def prepare_batch(request: Request, batch_id: int = Form(...)) -> HTMLResponse:
             "active_batch": active_batch,
             "prepared": True,
             "report": None,
+            "session_state": portal_session_manager.state,
+            "session_ready": portal_session_manager.state.status == "READY",
         },
     )
 
@@ -252,6 +261,8 @@ def run_batch(request: Request, batch_id: int = Form(...)) -> HTMLResponse:
             "active_batch": active_batch,
             "prepared": False,
             "report": report,
+            "session_state": portal_session_manager.state,
+            "session_ready": portal_session_manager.state.status == "READY",
         },
     )
 

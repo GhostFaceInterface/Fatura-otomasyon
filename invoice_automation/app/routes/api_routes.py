@@ -24,11 +24,12 @@ def health() -> dict[str, str]:
 def list_records(
     status: str | None = Query(default=None),
     batch_id: int | None = Query(default=None),
+    q: str | None = Query(default=None),
 ) -> dict[str, object]:
     """Return invoice records as JSON."""
 
     repository = InvoiceRecordRepository()
-    records = repository.list_all(status=status, batch_id=batch_id)
+    records = repository.list_all(status=status, batch_id=batch_id, search=q)
     return {
         "count": len(records),
         "records": [record.to_dict() for record in records],

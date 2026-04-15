@@ -10,11 +10,14 @@
 - Playwright lifecycle `BrowserManager` icinde tutulur.
 - Portal login ve manuel 2FA state akisi `PortalSessionManager` uzerinden yonetilir.
 - e-Arsiv sayfa navigasyonu `EArchiveNavigation`, form doldurma `InvoiceFormFiller`, hata hook'lari `PortalErrorDetector`, tek kayit orchestration `DraftCreator` icinde tutulur.
+- Portal retry/backoff ihtiyaci `utils.retry.retry_with_backoff` ile kucuk ve hedefli tutulur.
+- Navigation hazir kontrolu tek alan yerine birden fazla kritik form alanini dogrular.
 - Turmob sonrasi ad/soyad kontrolu `InvoiceFormFiller` icinde yapilir; uyusmazlik typed exception ile status'a map edilir.
 - Tek kayit draft DB/status akisi `SingleDraftService` ile repository'ye yazilir.
 - Gercek portal dialoglari `PortalErrorDetector` tarafindan okunur, OK ile kapatilir, screenshot alinir ve typed exception'a donusturulur.
 - Coklu isleme `BatchRunner` tarafindan sirali olarak yapilir; runner tek kayit akisini `SingleDraftService` uzerinden cagirir.
 - Batch raporu `BatchReportService` ile status dagilimi ve kayit detaylarina donusturulur.
+- UI batch run, session READY degilken kullaniciyi `/session` ekranina yonlendirir; backend runner yine session check ile guvenli abort uretir.
 - Durum degerleri `InvoiceStatus` enum'u ile merkezi tutulur.
 - Portal otomasyonu `automation/` katmaninda Playwright ile ayrilir.
 - Kayit bazli hatalar batch'i durdurmaz; session-level veya temiz form reset hatalari batch'i guvenli durdurur.

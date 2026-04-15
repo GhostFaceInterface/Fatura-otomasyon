@@ -168,8 +168,9 @@ class InvoiceRecordRepository:
         self,
         status: InvoiceStatus | str | None = None,
         batch_id: int | None = None,
+        search: str | None = None,
     ) -> list[InvoiceRecord]:
-        """List records, optionally filtering by status."""
+        """List records, optionally filtering by status, batch and text search."""
 
         filters: list[str] = []
         values: list[object] = []
@@ -179,6 +180,11 @@ class InvoiceRecordRepository:
         if batch_id is not None:
             filters.append("batch_id = ?")
             values.append(batch_id)
+        normalized_search = (search or "").strip()
+        if normalized_search:
+            filters.append("(ad LIKE ? OR soyad LIKE ? OR tc_kimlik_no LIKE ?)")
+            search_value = f"%{normalized_search}%"
+            values.extend([search_value, search_value, search_value])
 
         where_clause = f"WHERE {' AND '.join(filters)}" if filters else ""
         with self._connect() as connection:

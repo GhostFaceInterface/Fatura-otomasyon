@@ -1,6 +1,6 @@
 # Active Context
 
-Mevcut aktif is Faz 7 oncesi kritik operasyonel eksikleri tamamlamak ve son sertlestirme fazina hazir hale gecmektir.
+Mevcut aktif is son faz sertlestirme ve operasyon hazirligini tamamlamak olarak guncellendi.
 
 Hedefler:
 
@@ -9,7 +9,7 @@ Hedefler:
 - Playwright browser manager ve portal session manager eklendi.
 - Login formu .env credential'lariyla doldurulur.
 - 2FA ekrani beklenir, kullanici kodu manuel girer.
-- 2FA sonrasi session hazirligi e-Arsiv menu linki veya URL fallback ile dogrulanir.
+- 2FA sonrasi session hazirligi `/Home/Index` veya e-Arsiv menu linki ile dogrulanir.
 - Faz 4 tek kayit taslak POC tamamlandi.
 - Hazir session ile e-Arsiv olustur ekranina gidilir.
 - Tek kayit verisi forma yazilir, Taslak Kaydet butonu kullanilir.
@@ -33,4 +33,15 @@ Hedefler:
 - Turmob sonrasi `#txtPerson_FirstName` ve `#txtPerson_FamilyName` okunur; SQLite ad/soyad ile normalize edilerek karsilastirilir.
 - Ad/soyad uyusmazligi `FAILED_NAME_MISMATCH` statusu ile kayit bazli fail olur ve batch devam eder.
 
-Sonraki ana is Faz 7 sertlestirme, selector iyilestirmeleri, retry/backoff ve genel temizliktir.
+- Son faz hardening tamamlandi.
+- Login/session UI'da state ve kullanici yonlendirmesi daha net hale getirildi.
+- Session READY degilse batch run UI'da engellenir; backend yine session check ile guvenli abort uretir.
+- Navigation/form hazir kontrolu birden fazla kritik alanla yapilir.
+- Retry/backoff icin merkezi helper ve config alanlari eklendi.
+- Turmob ad/soyad alanlarini okuma ve Getir/Turmob tiklamalari kontrollu retry/backoff ile sertlestirildi.
+- Draft success redirect timeout'u ayri config ile yonetilir.
+- Records ekranina aktif batch icinde arama eklendi.
+- Batch raporuna detay filtreleri eklendi: tum, failed, skip, screenshot olanlar.
+- README, `docs/USAGE_GUIDE.md` ve `docs/OPERATIONS_CHECKLIST.md` operasyon odakli guncellendi.
+
+Sonraki ana is canli kullanim oncesi kucuk kayit grubu ile pilot test ve portal selector davranislarini gercek ortamda dogrulamaktir.

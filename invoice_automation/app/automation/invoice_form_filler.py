@@ -12,6 +12,7 @@ from invoice_automation.app.automation.portal_selectors import PortalSelectors, 
 from invoice_automation.app.config import settings
 from invoice_automation.app.db.models import InvoiceRecord
 from invoice_automation.app.utils.exceptions import ElementNotFoundError, NameMismatchError, PortalTimeoutError
+from invoice_automation.app.utils.retry import retry_with_backoff
 from invoice_automation.app.utils.screenshots import capture_error_screenshot
 
 logger = logging.getLogger(__name__)
@@ -65,7 +66,7 @@ class InvoiceFormFiller:
         timeout_ms: int | None = None,
     ) -> None:
         self.selectors = selectors
-        self.timeout_ms = timeout_ms or settings.playwright_timeout_ms
+        self.timeout_ms = timeout_ms or settings.field_wait_timeout_ms
 
     def fill_form(
         self,
@@ -83,7 +84,7 @@ class InvoiceFormFiller:
             "Para birimi secilemedi.",
         )
         self._click_text(page, self.selectors.getir_text, "Kur getir aksiyonu tetiklenemedi.")
-        self._wait_after_action(page, 750)
+        self._wait_after_action(page, settings.retry_backoff_base_ms)
 
         self._fill_locator(
             page,
@@ -152,15 +153,15 @@ class InvoiceFormFiller:
             raise ElementNotFoundError(error_message) from exc
 
     def _verify_turmob_customer_name(self, page: Any, form_data: InvoiceFormData) -> None:
-        first_name = self._read_locator_value(
+        first_name = self._read_non_empty_locator_value(
             page,
             self.selectors.person_first_name_selector,
-            "Turmob ad alani okunamadi.",
+            "Turmob ad alani okunamadi veya bos geldi.",
         )
-        family_name = self._read_locator_value(
+        family_name = self._read_non_empty_locator_value(
             page,
             self.selectors.person_family_name_selector,
-            "Turmob soyad alani okunamadi.",
+            "Turmob soyad alani okunamadi veya bos geldi.",
         )
         source_full_name = f"{form_data.ad} {form_data.soyad}"
         turmob_full_name = f"{first_name} {family_name}"
@@ -269,9 +270,34 @@ class InvoiceFormFiller:
 
     def _click_text(self, page: Any, text: str, error_message: str) -> None:
         try:
-            page.get_by_text(text).click(timeout=self.timeout_ms)
+            retry_with_backoff(
+                lambda: page.get_by_text(text).click(timeout=self.timeout_ms),
+                attempts=settings.retry_count,
+                base_delay_ms=settings.retry_backoff_base_ms,
+                description=f"click_text:{text}",
+                page=page,
+            )
         except Exception as exc:
             raise PortalTimeoutError(error_message) from exc
+
+    def _read_non_empty_locator_value(self, page: Any, selector: str, error_message: str) -> str:
+        def read_value() -> str:
+            value = self._read_locator_value(page, selector, error_message)
+            if value:
+                return value
+            raise ElementNotFoundError(error_message)
+
+        try:
+            return retry_with_backoff(
+                read_value,
+                attempts=settings.turmob_lookup_retry_count,
+                base_delay_ms=settings.retry_backoff_base_ms,
+                description=f"read_non_empty:{selector}",
+                page=page,
+                retry_exceptions=(ElementNotFoundError,),
+            )
+        except ElementNotFoundError:
+            raise
 
     def _wait_after_action(self, page: Any, timeout_ms: int) -> None:
         try:

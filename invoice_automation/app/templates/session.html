@@ -19,7 +19,7 @@
   <div class="session-state">
     <div>
       <span>Durum</span>
-      <strong>{{ state.status }}</strong>
+      <strong class="state-badge state-{{ state.status|lower }}">{{ state.status }}</strong>
     </div>
     <div>
       <span>Mesaj</span>
@@ -33,6 +33,20 @@
       <span>Guncelleme</span>
       <strong>{{ state.updated_at }}</strong>
     </div>
+  </div>
+
+  <div class="session-guidance">
+    {% if state.status == "READY" %}
+      Session hazir. Artik aktif batch icin taslak olusturma baslatilabilir.
+    {% elif state.status == "TWO_FACTOR_WAITING" %}
+      Acik tarayicida mail kodunu manuel girip dogrulayin, sonra bu ekranda session kontrolunu calistirin.
+    {% elif state.status == "FAILED" %}
+      Login/session kurulumu basarisiz oldu. Mesaji ve <code>data/logs/app.log</code> dosyasini kontrol edin.
+    {% elif state.status == "LOGIN_SUBMITTED" %}
+      Portal yonlendirmesi bekleniyor: 2FA sayfasi, <code>/Home/Index</code> veya e-Arsiv menu sinyali aranir.
+    {% else %}
+      Batch baslatmadan once tarayiciyi acip session durumunu <code>READY</code> yapin.
+    {% endif %}
   </div>
 
   <div class="session-actions">
@@ -53,9 +67,10 @@
   <ol class="checklist">
     <li><code>.env</code> icinde <code>PORTAL_USERNAME</code> ve <code>PORTAL_PASSWORD</code> alanlarini doldurun.</li>
     <li><strong>Tarayiciyi Ac / Login Baslat</strong> butonuna basin.</li>
+    <li>Portal direkt <code>/Home/Index</code> sayfasina giderse durum otomatik <code>READY</code> olur.</li>
     <li>Tarayicida 2FA ekrani acildiginda mail kodunu manuel girip <strong>Dogrula</strong> butonuna basin.</li>
-    <li>Panelde <strong>2FA Tamam, Session Kontrol Et</strong> butonuna basin.</li>
-    <li>Durum <code>READY</code> olursa Faz 4 icin session hazirdir.</li>
+    <li>2FA sonrasi panelde <strong>2FA Tamam, Session Kontrol Et</strong> butonuna basin.</li>
+    <li>Durum <code>READY</code> olursa batch icin session hazirdir.</li>
   </ol>
 </section>
 {% endblock %}

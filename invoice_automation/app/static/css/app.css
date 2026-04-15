@@ -121,6 +121,11 @@ button:disabled {
   opacity: 0.55;
 }
 
+button.active {
+  color: #ffffff;
+  background: #394b59;
+}
+
 .button-link.secondary {
   color: #182026;
   background: #e8edf2;
@@ -237,6 +242,58 @@ button:disabled {
   margin-top: 18px;
 }
 
+.session-guidance,
+.session-banner {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin: 14px 0;
+  padding: 12px;
+  border: 1px solid #d7dde4;
+  border-radius: 8px;
+  background: #fbfcfd;
+}
+
+.session-banner.ready {
+  border-color: #8fc7a9;
+  background: #f0faf4;
+}
+
+.session-banner.blocked {
+  border-color: #dcbd78;
+  background: #fff8e7;
+}
+
+.compact {
+  padding: 6px 9px;
+}
+
+.state-badge {
+  display: inline-block;
+  padding: 4px 8px;
+  border: 1px solid #b7d9f4;
+  border-radius: 8px;
+  background: #edf6ff;
+}
+
+.state-ready {
+  border-color: #8fc7a9;
+  background: #f0faf4;
+}
+
+.state-failed {
+  border-color: #dc9a9a;
+  background: #fff3f3;
+}
+
+.state-two_factor_waiting,
+.state-login_submitted,
+.state-browser_opening {
+  border-color: #dcbd78;
+  background: #fff8e7;
+}
+
 .secondary-button {
   color: #182026;
   background: #e8edf2;
@@ -269,6 +326,10 @@ button:disabled {
   color: #ffffff;
   background: #394b59;
   border-color: #394b59;
+}
+
+.report-filters button {
+  border: 1px solid #b9c3cf;
 }
 
 table {

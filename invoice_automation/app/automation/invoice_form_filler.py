@@ -26,7 +26,8 @@ class InvoiceFormData:
     ilce: str
     para_birimi: str
     kdv_orani: str
-    istisna_option_value: str
+    istisna_target_text: str
+    istisna_option_value: str | None
 
     @classmethod
     def from_record(cls, record: InvoiceRecord) -> "InvoiceFormData":
@@ -43,6 +44,7 @@ class InvoiceFormData:
             ilce=settings.default_ilce,
             para_birimi=settings.para_birimi,
             kdv_orani=settings.kdv_orani,
+            istisna_target_text=settings.istisna_target_text,
             istisna_option_value=settings.istisna_option_value,
         )
 
@@ -110,11 +112,11 @@ class InvoiceFormFiller:
             form_data.kdv_orani,
             "KDV orani secilemedi.",
         )
-        self._select_option(
+        self._select_exemption(
             page,
             self.selectors.exemption_selector,
+            form_data.istisna_target_text,
             form_data.istisna_option_value,
-            "Istisna kodu secilemedi.",
         )
         logger.info("Fatura formu dolduruldu | record_id=%s", form_data.record_id)
 
@@ -139,6 +141,72 @@ class InvoiceFormFiller:
             locator.select_option(value)
         except Exception as exc:
             raise ElementNotFoundError(error_message) from exc
+
+    def _select_exemption(
+        self,
+        page: Any,
+        selector: str,
+        target_text: str,
+        option_value: str | None,
+    ) -> None:
+        logger.info("Istisna dropdown bulundu mu kontrol ediliyor | selector=%s", selector)
+        try:
+            locator = page.locator(selector)
+            locator.wait_for(state="visible", timeout=self.timeout_ms)
+        except Exception as exc:
+            raise ElementNotFoundError("Istisna dropdown bulunamadi.") from exc
+
+        logger.info(
+            "Hedef istisna secimi deneniyor | target_text=%s option_value=%s",
+            target_text,
+            option_value or "-",
+        )
+
+        errors: list[str] = []
+        if option_value:
+            try:
+                locator.select_option(option_value)
+                self._verify_selected_option_text(locator, target_text)
+                logger.info("Istisna option value ile secildi | target_text=%s", target_text)
+                return
+            except Exception as exc:
+                errors.append(f"value={option_value}: {exc}")
+                logger.warning(
+                    "Istisna value ile secilemedi, metin ile denenecek | target_text=%s option_value=%s",
+                    target_text,
+                    option_value,
+                    exc_info=True,
+                )
+
+        try:
+            locator.select_option(label=target_text)
+            self._verify_selected_option_text(locator, target_text)
+            logger.info("Istisna basariyla secildi | target_text=%s", target_text)
+        except Exception as exc:
+            errors.append(f"label={target_text}: {exc}")
+            detail = " | ".join(errors)
+            logger.error(
+                "Istisna secimi basarisiz | target_text=%s detail=%s",
+                target_text,
+                detail,
+            )
+            raise ElementNotFoundError(
+                f"Istisna secilemedi: {target_text}. Detay: {detail}"
+            ) from exc
+
+    def _verify_selected_option_text(self, locator: Any, expected_text: str) -> None:
+        selected_text = locator.evaluate(
+            """
+            (select) => {
+                const option = select.options[select.selectedIndex];
+                return option ? option.textContent.trim() : "";
+            }
+            """
+        )
+        if str(selected_text).strip() != expected_text:
+            raise ElementNotFoundError(
+                f"Istisna secimi dogrulanamadi. Beklenen: {expected_text}, secilen: {selected_text}"
+            )
 
     def _click_text(self, page: Any, text: str, error_message: str) -> None:
         try:

@@ -25,6 +25,14 @@ def _int_env(name: str, default: int) -> int:
     return int(raw_value)
 
 
+def _optional_env(name: str) -> str | None:
+    raw_value = os.getenv(name)
+    if raw_value is None:
+        return None
+    value = raw_value.strip()
+    return value or None
+
+
 def _playwright_timeout_ms() -> int:
     if os.getenv("PLAYWRIGHT_TIMEOUT_MS"):
         return _int_env("PLAYWRIGHT_TIMEOUT_MS", 30_000)
@@ -65,7 +73,11 @@ class Settings:
     miktar: str = os.getenv("MIKTAR", "1")
     kdv_orani: str = os.getenv("KDV_ORANI", "0")
     istisna_kodu: str = os.getenv("ISTISNA_KODU", "302.11")
-    istisna_option_value: str = os.getenv("ISTISNA_OPTION_VALUE", "string:302")
+    istisna_target_text: str = os.getenv(
+        "ISTISNA_TARGET_TEXT",
+        "302-11/1-a Hizmet ihracatı",
+    )
+    istisna_option_value: str | None = _optional_env("ISTISNA_OPTION_VALUE")
     para_birimi: str = os.getenv("PARA_BIRIMI", "USD")
     kur_tipi: str = os.getenv("KUR_TIPI", "Dolar")
     default_il: str = os.getenv("DEFAULT_IL", "**")

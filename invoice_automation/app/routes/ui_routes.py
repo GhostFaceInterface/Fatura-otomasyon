@@ -114,6 +114,7 @@ def batch(request: Request) -> HTMLResponse:
             "request": request,
             "preview": preview,
             "prepared": False,
+            "report": None,
         },
     )
 
@@ -129,6 +130,25 @@ def prepare_batch(request: Request) -> HTMLResponse:
             "request": request,
             "preview": preview,
             "prepared": True,
+            "report": None,
+        },
+    )
+
+
+@router.post("/batch/run", response_class=HTMLResponse)
+def run_batch(request: Request) -> HTMLResponse:
+    """Run selected eligible records through the Phase 6 batch flow."""
+
+    batch_service = BatchService()
+    report = batch_service.run_selected_batch()
+    preview = batch_service.preview()
+    return templates.TemplateResponse(
+        "batch.html",
+        {
+            "request": request,
+            "preview": preview,
+            "prepared": False,
+            "report": report,
         },
     )
 

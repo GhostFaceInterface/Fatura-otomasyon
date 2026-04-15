@@ -39,6 +39,13 @@ def batch_preview() -> dict[str, object]:
     return BatchService().preview().to_dict()
 
 
+@router.post("/batch/run")
+def run_batch() -> dict[str, object]:
+    """Run selected eligible records and return the batch report."""
+
+    return BatchService().run_selected_batch().to_dict()
+
+
 @router.get("/session/status")
 def session_status() -> dict[str, str | None]:
     """Return current browser session status."""

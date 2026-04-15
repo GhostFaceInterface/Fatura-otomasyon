@@ -81,7 +81,27 @@ Notlar:
 - Screenshotlar `data/logs/screenshots/` altinda record id ve stage ile tutulur.
 - Faz 6 bu kayit bazli dayanikli akisi coklu batch'e tasiyacaktir.
 
+## Faz 6
+
+Tamamlandi:
+
+- Secili ve PENDING/SELECTED durumundaki kayitlari batch icin filtreleme
+- Deterministic id sirasiyla coklu kayit isleme
+- `BatchRunner` ile mevcut `SingleDraftService` tek kayit akisini orkestre etme
+- Kayit bazli FAILED/SKIPPED durumlarda batch'e devam etme
+- ABORTED_SESSION_LOST ve temiz yeni kayit sayfasina donus hatalarinda batch'i guvenli durdurma
+- Basari veya hata sonrasi sonraki kayit icin e-Arsiv olustur sayfasina retry ile donme
+- Batch raporu: total, processed, success, skipped, failed, aborted, status dagilimi ve kayit detaylari
+- `/batch/run` UI aksiyonu ve `/api/batch/run` JSON endpointi
+- `NAVIGATION_RETRY_COUNT` config alani
+
+Notlar:
+
+- Batch run daha once SUCCESS/FAILED/SKIPPED/ABORTED durumuna gecmis kayitlari yeniden denemez.
+- Basari sonrasi `/EArchive/Drafts` sayfasindan e-Arsiv olustur linkiyle temiz forma donulur.
+- Hata sonrasi dialog Faz 5 katmaninda kapandiktan sonra form state'i terk edilip yeni olustur ekranina donulur.
+- Bu faz websocket/canli progress kurmaz; senkron post/response sonuc raporu verir.
+
 Henuz tamamlanmayan sonraki isler:
 
-- Faz 6: coklu batch
 - Faz 7: sertlestirme ve dokumantasyon iyilestirme

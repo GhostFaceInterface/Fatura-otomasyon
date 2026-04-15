@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 import sqlite3
 
-from invoice_automation.app.constants import InvoiceStatus
+from invoice_automation.app.constants import BATCH_ELIGIBLE_STATUSES, InvoiceStatus
 from invoice_automation.app.db.database import get_connection, initialize_database
 from invoice_automation.app.db.models import InvoiceRecord, InvoiceRecordCreate, utc_timestamp
 
@@ -117,6 +117,27 @@ class InvoiceRecordRepository:
                 WHERE secili_mi = 1
                 ORDER BY id ASC
                 """
+            ).fetchall()
+        return [InvoiceRecord.from_row(row) for row in rows]
+
+    def list_selected_for_batch(
+        self,
+        eligible_statuses: tuple[InvoiceStatus, ...] = BATCH_ELIGIBLE_STATUSES,
+    ) -> list[InvoiceRecord]:
+        """List selected records that are allowed to enter a batch run."""
+
+        status_values = tuple(status.value for status in eligible_statuses)
+        placeholders = ",".join("?" for _ in status_values)
+        with self._connect() as connection:
+            rows = connection.execute(
+                f"""
+                SELECT *
+                FROM invoice_records
+                WHERE secili_mi = 1
+                  AND islem_durumu IN ({placeholders})
+                ORDER BY id ASC
+                """,
+                status_values,
             ).fetchall()
         return [InvoiceRecord.from_row(row) for row in rows]
 

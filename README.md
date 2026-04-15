@@ -2,7 +2,7 @@
 
 Lokal bilgisayarda calisan, e-Arsiv taslak fatura olusturma surecini yari otomatik hale getirmek icin gelistirilen Python uygulamasi.
 
-Faz 1, Faz 2, Faz 3 ve Faz 4 kapsaminda uygulama veri import eder, SQLite'a kaydeder, kayitlari lokal web panelde listeler, PENDING kayitlari secilebilir hale getirir, secili kayitlar icin batch hazirlik ekrani sunar, Playwright ile portal login + manuel 2FA session akisini yonetir ve hazir session ile tek kayit icin e-Arsiv taslak POC olusturur.
+Faz 1-6 kapsaminda uygulama veri import eder, SQLite'a kaydeder, kayitlari lokal web panelde listeler, PENDING kayitlari secilebilir hale getirir, Playwright ile portal login + manuel 2FA session akisini yonetir, tek kayit icin e-Arsiv taslak POC olusturur ve secili uygun kayitlari sirali batch olarak isleyip sonuc raporu uretir.
 
 ## Ozellikler
 
@@ -15,13 +15,16 @@ Faz 1, Faz 2, Faz 3 ve Faz 4 kapsaminda uygulama veri import eder, SQLite'a kayd
 - FastAPI + Jinja2 ile sade lokal web panel
 - JSON API saglik kontrolu ve kayit listesi
 - Kalici kayit secimi
-- Batch hazirlik ve temel progress ekrani
+- Batch hazirlik, sirali batch isleme ve sonuc raporu
 - Headful Playwright browser session yonetimi
 - Portal login formunu .env credential'lari ile otomatik doldurma
 - Manuel 2FA sonrasi session hazir kontrolu
 - Tek kayit icin e-Arsiv taslak POC
+- Secili PENDING/SELECTED kayitlari toplu taslak isleme
 - Draft sonucunu SQLite status/hata alanlarina yazma
 - Gercek portal hata dialoglarini status/exception'a map etme
+- Kayit bazli hatalarda batch'e devam etme
+- Kritik session/navigation hatasinda batch'i guvenli durdurma
 - Hata aninda screenshot alma
 - Uygulama loglari
 
@@ -81,6 +84,7 @@ PORTAL_USERNAME=...
 PORTAL_PASSWORD=...
 PLAYWRIGHT_HEADLESS=false
 PLAYWRIGHT_TIMEOUT_MS=30000
+NAVIGATION_RETRY_COUNT=2
 MAL_HIZMET_ADI=YURT DIŞI KONAKLAMA BEDELİ
 PARA_BIRIMI=USD
 KDV_ORANI=0
@@ -132,11 +136,13 @@ Desteklenen dosya tipleri:
 - `/records` kayit listesi
 - `/records?status=PENDING` durum filtresi
 - `/batch` secili kayitlar icin batch hazirlik ekrani
+- `/batch/run` secili uygun kayitlari batch olarak isleme
 - `/session` browser login ve 2FA session ekrani
 - `/draft` tek kayit e-Arsiv taslak POC ekrani
 - `/api/health` saglik kontrolu
 - `/api/records` JSON kayit listesi
 - `/api/batch/preview` JSON batch preview
+- `/api/batch/run` JSON batch run raporu
 - `/api/session/status` JSON session durumu
 - `/api/session/start` browser login baslatma
 - `/api/session/verify` manuel 2FA sonrasi session kontrolu
@@ -147,10 +153,9 @@ Desteklenen dosya tipleri:
 
 - Kolon mapping ekrani yoktur; sadece normalize edilen minimum kolonlar desteklenir.
 - TCKN kontrolu format seviyesindedir; resmi checksum validasyonu yoktur.
-- Portal tek kayit taslak POC disinda coklu otomasyon uygulanmamistir.
-- Coklu fatura olusturma Faz 6 ve sonrasi icin ayrilmistir.
-- Faz 2 batch hazirligi sadece secili kayitlari hazirlar; portala gitmez.
-- Faz 4 sadece tek kayit POC yapar; coklu batch islemez.
+- Batch run sadece secili ve durumu PENDING/SELECTED olan kayitlari isler.
+- Basari/hata/skip durumundaki kayitlar bu fazda otomatik yeniden denenmez.
+- Batch calismasi siralidir; dagitik job queue veya websocket yoktur.
 - Invalid TCKN, Turmob servis hatasi ve e-Fatura mukellefi dialoglari yakalanir.
 
 ## Guvenlik Notlari
@@ -190,9 +195,13 @@ pytest
 20. Turmob servis hatasinda `Servis hatası oluştu` dialogunun `FAILED_TURMOB_SERVICE_ERROR` yazdigini kontrol edin.
 21. e-Fatura mukellefi kiside `e-Fatura Mükellefine e-Arşiv Fatura Kesilemez` dialogunun `SKIPPED_EFATURA_MUKELLEFI` yazdigini kontrol edin.
 22. Hata aninda dialogun OK ile kapandigini ve `data/logs/screenshots/` altina screenshot yazildigini kontrol edin.
-23. Eksik kolonlu dosya yukleyip anlasilir hata mesajini kontrol edin.
-24. `data/invoice_automation.sqlite3` dosyasinin olustugunu kontrol edin.
-25. `data/logs/app.log` dosyasina log yazildigini kontrol edin.
+23. `/batch` ekraninda `Secilileri Taslak Olustur` butonuna basin.
+24. Birden fazla secili kaydin sirayla islenip sonuc raporunda success/failed/skipped sayilarinin gorundugunu kontrol edin.
+25. Bir kayit hata verdiginde sonraki kayda gecildigini kontrol edin.
+26. Session kapanirsa batch'in kritik abort raporuyla guvenli durdugunu kontrol edin.
+27. Eksik kolonlu dosya yukleyip anlasilir hata mesajini kontrol edin.
+28. `data/invoice_automation.sqlite3` dosyasinin olustugunu kontrol edin.
+29. `data/logs/app.log` dosyasina log yazildigini kontrol edin.
 
 ## Portal Hata Patternleri
 
@@ -210,5 +219,5 @@ Kodda merkezi tutulan dialog basliklari ve mesaj patternleri:
 - Faz 3: Playwright browser session ve login + 2FA akisi tamamlandi
 - Faz 4: tek kayit icin taslak olusturma POC tamamlandi
 - Faz 5: hata senaryolari ve screenshot/log iyilestirmeleri tamamlandi
-- Faz 6: coklu batch isleme ve sonuc raporu
+- Faz 6: coklu batch isleme ve sonuc raporu tamamlandi
 - Faz 7: sertlestirme, refactor ve UI iyilestirmeleri

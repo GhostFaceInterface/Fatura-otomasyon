@@ -1,20 +1,27 @@
-"""Batch preparation service skeleton for later automation phases."""
+"""Batch preparation and execution service."""
 
 from __future__ import annotations
 
 import logging
 
+from invoice_automation.app.automation.batch_runner import BatchRunner
 from invoice_automation.app.db.repository import InvoiceRecordRepository
-from invoice_automation.app.schemas.batch import BatchPreview
+from invoice_automation.app.schemas.batch import BatchPreview, BatchRunReport
+from invoice_automation.app.services.draft_service import SingleDraftService
 
 logger = logging.getLogger(__name__)
 
 
 class BatchService:
-    """Prepare selected records for a future browser automation batch."""
+    """Prepare and run selected records through portal automation."""
 
-    def __init__(self, repository: InvoiceRecordRepository | None = None) -> None:
+    def __init__(
+        self,
+        repository: InvoiceRecordRepository | None = None,
+        runner: BatchRunner | None = None,
+    ) -> None:
         self.repository = repository or InvoiceRecordRepository()
+        self.runner = runner
 
     def preview(self) -> BatchPreview:
         """Return a read-only preview of currently selected records."""
@@ -42,3 +49,22 @@ class BatchService:
             preview.total_amount_usd,
         )
         return preview
+
+    def run_selected_batch(self) -> BatchRunReport:
+        """Run selected eligible records sequentially and return the final report."""
+
+        selected_records = self.repository.list_selected_for_batch()
+        logger.info("Batch run istegi alindi | eligible_selected=%s", len(selected_records))
+        runner = self.runner or BatchRunner(
+            draft_service=SingleDraftService(repository=self.repository),
+        )
+        report = runner.run(selected_records)
+        logger.info(
+            "Batch run raporu hazir | processed=%s success=%s skipped=%s failed=%s aborted=%s",
+            report.total_processed,
+            report.success_count,
+            report.skipped_count,
+            report.failed_count,
+            report.aborted_count,
+        )
+        return report

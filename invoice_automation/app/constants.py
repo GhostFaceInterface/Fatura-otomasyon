@@ -34,3 +34,19 @@ EARCHIVE_DRAFTS_SUCCESS_TEXTS = (
     "E-Arşiv Taslaklar",
     "e-Arşiv Taslaklar",
 )
+
+BATCH_ELIGIBLE_STATUSES = (
+    InvoiceStatus.PENDING,
+    InvoiceStatus.SELECTED,
+)
+BATCH_CONTINUE_STATUSES = (
+    InvoiceStatus.SUCCESS_DRAFT_CREATED,
+    InvoiceStatus.FAILED_INVALID_TCKN,
+    InvoiceStatus.FAILED_TURMOB_SERVICE_ERROR,
+    InvoiceStatus.SKIPPED_EFATURA_MUKELLEFI,
+    InvoiceStatus.FAILED_PORTAL_TIMEOUT,
+    InvoiceStatus.FAILED_UNKNOWN,
+)
+BATCH_ABORT_STATUSES = (
+    InvoiceStatus.ABORTED_SESSION_LOST,
+)

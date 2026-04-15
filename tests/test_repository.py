@@ -138,3 +138,41 @@ def test_repository_updates_processing_state(tmp_path: Path) -> None:
     assert updated.hata_kodu == "PortalTimeoutError"
     assert updated.hata_mesaji == "Timeout"
     assert updated.secili_mi is True
+
+
+def test_repository_lists_only_selected_eligible_records_for_batch(tmp_path: Path) -> None:
+    repository = InvoiceRecordRepository(tmp_path / "test.sqlite3")
+    pending = repository.create(
+        InvoiceRecordCreate(
+            ad="Ali",
+            soyad="Yilmaz",
+            tc_kimlik_no="12345678901",
+            tutar_usd=1500.0,
+            secili_mi=True,
+            islem_durumu=InvoiceStatus.PENDING,
+        )
+    )
+    selected = repository.create(
+        InvoiceRecordCreate(
+            ad="Ayse",
+            soyad="Demir",
+            tc_kimlik_no="10987654321",
+            tutar_usd=2200.0,
+            secili_mi=True,
+            islem_durumu=InvoiceStatus.SELECTED,
+        )
+    )
+    repository.create(
+        InvoiceRecordCreate(
+            ad="Veli",
+            soyad="Kaya",
+            tc_kimlik_no="11111111111",
+            tutar_usd=900.0,
+            secili_mi=True,
+            islem_durumu=InvoiceStatus.FAILED_INVALID_TCKN,
+        )
+    )
+
+    eligible_records = repository.list_selected_for_batch()
+
+    assert [record.id for record in eligible_records] == [pending.id, selected.id]

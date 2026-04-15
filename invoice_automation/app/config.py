@@ -71,6 +71,7 @@ class Settings:
     playwright_timeout_ms: int = _playwright_timeout_ms()
     timeout_seconds: int = int(os.getenv("TIMEOUT_SECONDS", "30"))
     retry_count: int = int(os.getenv("RETRY_COUNT", "2"))
+    navigation_retry_count: int = int(os.getenv("NAVIGATION_RETRY_COUNT", "2"))
 
     mal_hizmet_adi: str = os.getenv("MAL_HIZMET_ADI", "YURT DIŞI KONAKLAMA BEDELİ")
     miktar: str = os.getenv("MIKTAR", "1")

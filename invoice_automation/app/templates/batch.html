@@ -5,7 +5,7 @@
   <div class="section-header">
     <div>
       <h2>Batch Hazirligi</h2>
-      <p>Secili kayitlar burada kontrol edilir. Portal otomasyonu Faz 3 ve sonrasi icin ayrilmistir.</p>
+      <p>Secili PENDING/SELECTED kayitlar sirayla taslak olusturma akisina verilir.</p>
     </div>
     <div class="header-actions">
       <a class="button-link secondary" href="/records">Kayit Secimine Don</a>
@@ -42,10 +42,115 @@
     <button type="submit" {% if preview.total_selected == 0 %}disabled{% endif %}>Batch'e Hazirla</button>
   </form>
 
+  <form action="/batch/run" method="post" class="batch-form">
+    <button type="submit" {% if preview.total_selected == 0 %}disabled{% endif %}>
+      Secilileri Taslak Olustur
+    </button>
+  </form>
+
   {% if preview.total_selected == 0 %}
   <p class="muted">Batch hazirlamak icin once kayit ekranindan en az bir PENDING kayit secin.</p>
+  {% else %}
+  <p class="muted">Batch run sadece secili ve durumu PENDING/SELECTED olan kayitlari isler. Eski basari/hata durumlari yeniden denenmez.</p>
   {% endif %}
 </section>
+
+{% if report %}
+<section class="section">
+  <div class="section-header">
+    <div>
+      <h2>Batch Sonuc Raporu</h2>
+      <p>{{ report.started_at }} - {{ report.ended_at }} arasinda {{ "%.3f"|format(report.duration_seconds) }} saniyede tamamlandi.</p>
+    </div>
+    {% if report.aborted_due_to_session_loss %}
+    <div class="alert inline-error">Batch kritik session/navigation problemi nedeniyle durdu: {{ report.abort_reason }}</div>
+    {% endif %}
+  </div>
+
+  <div class="summary-grid">
+    <div class="summary-item">
+      <span>Secili Uygun Kayit</span>
+      <strong>{{ report.total_selected }}</strong>
+    </div>
+    <div class="summary-item">
+      <span>Islenen</span>
+      <strong>{{ report.total_processed }}</strong>
+    </div>
+    <div class="summary-item">
+      <span>Basarili</span>
+      <strong>{{ report.success_count }}</strong>
+    </div>
+    <div class="summary-item">
+      <span>Skip</span>
+      <strong>{{ report.skipped_count }}</strong>
+    </div>
+    <div class="summary-item">
+      <span>Failed</span>
+      <strong>{{ report.failed_count }}</strong>
+    </div>
+    <div class="summary-item">
+      <span>Abort</span>
+      <strong>{{ report.aborted_count }}</strong>
+    </div>
+  </div>
+
+  <div class="progress-bar" aria-label="Batch result progress">
+    <div style="width: {{ report.progress_percent }}%"></div>
+  </div>
+
+  <h3>Status Dagilimi</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>Status</th>
+        <th>Adet</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for status, count in report.results_by_status.items() %}
+      <tr>
+        <td><span class="status">{{ status }}</span></td>
+        <td>{{ count }}</td>
+      </tr>
+      {% else %}
+      <tr>
+        <td colspan="2" class="empty">Islenen kayit yok.</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <h3>Kayit Detaylari</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Ad Soyad</th>
+        <th>TCKN</th>
+        <th>Final Status</th>
+        <th>Hata</th>
+        <th>Screenshot</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for detail in report.details %}
+      <tr>
+        <td>{{ detail.record_id }}</td>
+        <td>{{ detail.full_name }}</td>
+        <td>{{ detail.tc_kimlik_no }}</td>
+        <td><span class="status">{{ detail.final_status }}</span></td>
+        <td>{{ detail.error_message or "-" }}</td>
+        <td>{{ detail.screenshot_path or "-" }}</td>
+      </tr>
+      {% else %}
+      <tr>
+        <td colspan="6" class="empty">Detay yok.</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
 
 <section class="section">
   <h2>Secili Kayitlar</h2>

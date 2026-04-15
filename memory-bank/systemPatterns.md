@@ -10,6 +10,8 @@
 - e-Arsiv sayfa navigasyonu `EArchiveNavigation`, form doldurma `InvoiceFormFiller`, hata hook'lari `PortalErrorDetector`, tek kayit orchestration `DraftCreator` icinde tutulur.
 - Tek kayit draft DB/status akisi `SingleDraftService` ile repository'ye yazilir.
 - Gercek portal dialoglari `PortalErrorDetector` tarafindan okunur, OK ile kapatilir, screenshot alinir ve typed exception'a donusturulur.
+- Coklu isleme `BatchRunner` tarafindan sirali olarak yapilir; runner tek kayit akisini `SingleDraftService` uzerinden cagirir.
+- Batch raporu `BatchReportService` ile status dagilimi ve kayit detaylarina donusturulur.
 - Durum degerleri `InvoiceStatus` enum'u ile merkezi tutulur.
 - Portal otomasyonu `automation/` katmaninda Playwright ile ayrilir.
-- Kayit bazli hatalar batch'i durdurmayacak; session-level kritik hatalar batch'i guvenli durduracak.
+- Kayit bazli hatalar batch'i durdurmaz; session-level veya temiz form reset hatalari batch'i guvenli durdurur.

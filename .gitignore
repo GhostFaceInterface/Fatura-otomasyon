@@ -1,0 +1,14 @@
+.env
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+data/*.sqlite3
+data/logs/*.log
+data/imports/*
+data/processed/*
+
+!data/imports/.gitkeep
+!data/processed/.gitkeep
+!data/logs/.gitkeep

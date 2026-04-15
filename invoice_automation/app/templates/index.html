@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="section">
+  <h2>Veri Yukleme</h2>
+  <p>CSV veya Excel dosyasi yukleyin. Minimum kolonlar: <code>ad</code>, <code>soyad</code>, <code>tc_kimlik_no</code>, <code>tutar_usd</code>, <code>aciklama</code>.</p>
+
+  <form class="upload-form" action="/import" method="post" enctype="multipart/form-data">
+    <label for="file">Import dosyasi</label>
+    <input id="file" name="file" type="file" accept=".csv,.xlsx,.xls" required>
+    <button type="submit">Dosyayi Import Et</button>
+  </form>
+</section>
+
+{% if error %}
+<section class="alert alert-error">
+  <h2>Import reddedildi</h2>
+  <p>{{ error }}</p>
+</section>
+{% endif %}
+
+{% if result %}
+<section class="alert alert-success">
+  <h2>Import tamamlandi</h2>
+  <p><strong>{{ result.imported_count }}</strong> kayit eklendi, <strong>{{ result.failed_count }}</strong> satir atlandi.</p>
+  <p><a href="/records">Kayitlari goruntule</a></p>
+</section>
+
+{% if result.row_errors %}
+<section class="section">
+  <h2>Atlanan Satirlar</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Satir</th>
+        <th>Hatalar</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row_error in result.row_errors %}
+      <tr>
+        <td>{{ row_error.row_number }}</td>
+        <td>{{ row_error.errors | join(", ") }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+{% endif %}
+{% endblock %}

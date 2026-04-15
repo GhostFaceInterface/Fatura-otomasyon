@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="section">
+  <div class="section-header">
+    <div>
+      <h2>Batch Hazirligi</h2>
+      <p>Secili kayitlar burada kontrol edilir. Portal otomasyonu Faz 3 ve sonrasi icin ayrilmistir.</p>
+    </div>
+    <a class="button-link secondary" href="/records">Kayit Secimine Don</a>
+  </div>
+
+  {% if prepared %}
+  <div class="alert inline-success">
+    Batch hazirlandi. Toplam secili kayit: <strong>{{ preview.total_selected }}</strong>.
+  </div>
+  {% endif %}
+
+  <div class="summary-grid">
+    <div class="summary-item">
+      <span>Secili Kayit</span>
+      <strong>{{ preview.total_selected }}</strong>
+    </div>
+    <div class="summary-item">
+      <span>Toplam USD</span>
+      <strong>{{ "%.2f"|format(preview.total_amount_usd) }}</strong>
+    </div>
+    <div class="summary-item">
+      <span>Progress</span>
+      <strong>{{ preview.completed_count }} / {{ preview.total_selected }}</strong>
+    </div>
+  </div>
+
+  <div class="progress-bar" aria-label="Batch progress">
+    <div style="width: {{ preview.progress_percent }}%"></div>
+  </div>
+
+  <form action="/batch/prepare" method="post" class="batch-form">
+    <button type="submit" {% if preview.total_selected == 0 %}disabled{% endif %}>Batch'e Hazirla</button>
+  </form>
+
+  {% if preview.total_selected == 0 %}
+  <p class="muted">Batch hazirlamak icin once kayit ekranindan en az bir PENDING kayit secin.</p>
+  {% endif %}
+</section>
+
+<section class="section">
+  <h2>Secili Kayitlar</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Ad Soyad</th>
+        <th>TCKN</th>
+        <th>Tutar USD</th>
+        <th>Durum</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for record in preview.records %}
+      <tr>
+        <td>{{ record.id }}</td>
+        <td>{{ record.ad }} {{ record.soyad }}</td>
+        <td>{{ record.tc_kimlik_no }}</td>
+        <td>{{ "%.2f"|format(record.tutar_usd) }}</td>
+        <td><span class="status">{{ record.islem_durumu }}</span></td>
+      </tr>
+      {% else %}
+      <tr>
+        <td colspan="5" class="empty">Secili kayit bulunamadi.</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

@@ -1,6 +1,6 @@
 # Active Context
 
-Mevcut aktif is Faz 6 coklu batch islemeyi tamamlamak ve Faz 7 sertlestirme/dokumantasyon fazina hazir hale gecmektir.
+Mevcut aktif is Faz 7 oncesi kritik operasyonel eksikleri tamamlamak ve son sertlestirme fazina hazir hale gecmektir.
 
 Hedefler:
 
@@ -24,5 +24,13 @@ Hedefler:
 - Kayit bazli FAILED/SKIPPED durumlar batch'i durdurmaz.
 - ABORTED_SESSION_LOST veya yeni e-Arsiv olustur sayfasina guvenli donus hatasi batch'i kritik nedenle durdurur.
 - Batch sonunda UI/API uzerinden toplam success/skip/fail/abort ve kayit bazli detay raporu doner.
+- Faz 7 oncesi kritik eksikler tamamlandi.
+- Her import `import_batches` fatura donemine baglanir; `invoice_records.batch_id` ile donem izolasyonu saglanir.
+- Excel import akisi sheet secimi, kolon mapping ve batch adi ile calisir; otomatik alias mapping fallback olarak kalir.
+- Records ve batch ekranlari aktif fatura donemi baglaminda calisir.
+- Records ekraninda uygun kayitlar icin `Tumunu Sec` checkbox'i vardir.
+- Login sonrasi `/Home/Index`, e-Arsiv menu veya 2FA sayfasi ayirt edilir; 2FA yoksa session dogrudan READY olur.
+- Turmob sonrasi `#txtPerson_FirstName` ve `#txtPerson_FamilyName` okunur; SQLite ad/soyad ile normalize edilerek karsilastirilir.
+- Ad/soyad uyusmazligi `FAILED_NAME_MISMATCH` statusu ile kayit bazli fail olur ve batch devam eder.
 
 Sonraki ana is Faz 7 sertlestirme, selector iyilestirmeleri, retry/backoff ve genel temizliktir.

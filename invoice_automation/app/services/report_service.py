@@ -27,6 +27,7 @@ class BatchReportService:
         status_counts = Counter(detail.final_status for detail in details)
         failed_statuses = {
             InvoiceStatus.FAILED_INVALID_TCKN.value,
+            InvoiceStatus.FAILED_NAME_MISMATCH.value,
             InvoiceStatus.FAILED_TURMOB_SERVICE_ERROR.value,
             InvoiceStatus.FAILED_PORTAL_TIMEOUT.value,
             InvoiceStatus.FAILED_UNKNOWN.value,

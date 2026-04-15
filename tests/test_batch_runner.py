@@ -179,6 +179,7 @@ def test_batch_runner_does_not_start_without_ready_session() -> None:
 def _record(record_id: int) -> InvoiceRecord:
     return InvoiceRecord(
         id=record_id,
+        batch_id=1,
         ad=f"Ad{record_id}",
         soyad=f"Soyad{record_id}",
         tc_kimlik_no=f"1234567890{record_id}",

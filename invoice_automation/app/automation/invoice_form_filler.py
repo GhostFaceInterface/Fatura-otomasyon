@@ -6,11 +6,13 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 import logging
+import re
 
 from invoice_automation.app.automation.portal_selectors import PortalSelectors, portal_selectors
 from invoice_automation.app.config import settings
 from invoice_automation.app.db.models import InvoiceRecord
-from invoice_automation.app.utils.exceptions import ElementNotFoundError, PortalTimeoutError
+from invoice_automation.app.utils.exceptions import ElementNotFoundError, NameMismatchError, PortalTimeoutError
+from invoice_automation.app.utils.screenshots import capture_error_screenshot
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +22,8 @@ class InvoiceFormData:
     """Data mapped from SQLite record/config into portal form fields."""
 
     record_id: int
+    ad: str
+    soyad: str
     tc_kimlik_no: str
     tutar_usd: float
     mal_hizmet_adi: str
@@ -38,6 +42,8 @@ class InvoiceFormData:
         service_name = description or settings.mal_hizmet_adi
         return cls(
             record_id=record.id,
+            ad=record.ad,
+            soyad=record.soyad,
             tc_kimlik_no=record.tc_kimlik_no,
             tutar_usd=record.tutar_usd,
             mal_hizmet_adi=service_name,
@@ -93,6 +99,7 @@ class InvoiceFormFiller:
         self._wait_after_action(page, 1_000)
         if after_turmob_lookup is not None:
             after_turmob_lookup()
+        self._verify_turmob_customer_name(page, form_data)
 
         self._fill_locator(page, self.selectors.city_selector, form_data.il, "Il alani doldurulamadi.")
         self._press_locator(page, self.selectors.city_selector, "Tab")
@@ -135,6 +142,50 @@ class InvoiceFormFiller:
             locator.fill(value)
         except Exception as exc:
             raise ElementNotFoundError(error_message) from exc
+
+    def _read_locator_value(self, page: Any, selector: str, error_message: str) -> str:
+        try:
+            locator = page.locator(selector)
+            locator.wait_for(state="visible", timeout=self.timeout_ms)
+            return str(locator.input_value(timeout=self.timeout_ms)).strip()
+        except Exception as exc:
+            raise ElementNotFoundError(error_message) from exc
+
+    def _verify_turmob_customer_name(self, page: Any, form_data: InvoiceFormData) -> None:
+        first_name = self._read_locator_value(
+            page,
+            self.selectors.person_first_name_selector,
+            "Turmob ad alani okunamadi.",
+        )
+        family_name = self._read_locator_value(
+            page,
+            self.selectors.person_family_name_selector,
+            "Turmob soyad alani okunamadi.",
+        )
+        source_full_name = f"{form_data.ad} {form_data.soyad}"
+        turmob_full_name = f"{first_name} {family_name}"
+        normalized_source = normalize_person_name(source_full_name)
+        normalized_turmob = normalize_person_name(turmob_full_name)
+        matched = normalized_source == normalized_turmob
+        logger.info(
+            "Turmob ad soyad kontrolu | record_id=%s tc=%s source=%s turmob=%s normalized_source=%s normalized_turmob=%s matched=%s",
+            form_data.record_id,
+            form_data.tc_kimlik_no,
+            source_full_name,
+            turmob_full_name,
+            normalized_source,
+            normalized_turmob,
+            matched,
+        )
+        if matched:
+            return
+
+        screenshot_path = capture_error_screenshot(page, form_data.record_id, "name_mismatch")
+        raise NameMismatchError(
+            f"Turmob ad/soyad eslesmedi. Kaynak: {source_full_name}, Turmob: {turmob_full_name}",
+            stage="name_verification",
+            screenshot_path=screenshot_path,
+        )
 
     def _press_locator(self, page: Any, selector: str, key: str) -> None:
         try:
@@ -231,3 +282,9 @@ class InvoiceFormFiller:
     def _format_amount(self, amount: float) -> str:
         text = f"{amount:.2f}".rstrip("0").rstrip(".")
         return text or "0"
+
+
+def normalize_person_name(value: str) -> str:
+    """Normalize person names for source-vs-Turmob comparison."""
+
+    return re.sub(r"\s+", " ", str(value).strip().casefold())

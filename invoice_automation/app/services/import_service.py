@@ -9,10 +9,14 @@ import unicodedata
 
 import pandas as pd
 
-from invoice_automation.app.constants import SUPPORTED_IMPORT_EXTENSIONS
-from invoice_automation.app.db.models import InvoiceRecordCreate
+from invoice_automation.app.constants import OPTIONAL_IMPORT_COLUMNS, REQUIRED_IMPORT_COLUMNS, SUPPORTED_IMPORT_EXTENSIONS
+from invoice_automation.app.db.models import ImportBatchCreate, InvoiceRecordCreate
 from invoice_automation.app.db.repository import InvoiceRecordRepository
-from invoice_automation.app.schemas.invoice_record import ImportResult, RowValidationError
+from invoice_automation.app.schemas.invoice_record import (
+    ImportResult,
+    ImportSheetInspection,
+    RowValidationError,
+)
 from invoice_automation.app.services.validation_service import (
     validate_import_row,
     validate_required_columns,
@@ -59,20 +63,75 @@ class ImportService:
     def __init__(self, repository: InvoiceRecordRepository | None = None) -> None:
         self.repository = repository or InvoiceRecordRepository()
 
-    def import_file(self, file_path: Path) -> ImportResult:
+    def inspect_file(self, file_path: Path, sheet_name: str | None = None) -> ImportSheetInspection:
+        """Return available sheets and columns for the uploaded import file."""
+
+        self._ensure_supported_file(file_path)
+        sheet_names = self.get_sheet_names(file_path)
+        selected_sheet = sheet_name or sheet_names[0]
+        if selected_sheet not in sheet_names:
+            raise ImportValidationError(f"Sheet bulunamadi: {selected_sheet}")
+        columns = self.get_columns(file_path, selected_sheet)
+        return ImportSheetInspection(
+            source_file=file_path.name,
+            sheet_names=sheet_names,
+            selected_sheet=selected_sheet,
+            columns=columns,
+        )
+
+    def get_sheet_names(self, file_path: Path) -> list[str]:
+        """Return sheet names for Excel files or a single CSV pseudo-sheet."""
+
+        self._ensure_supported_file(file_path)
+        if file_path.suffix.lower() == ".csv":
+            return ["CSV"]
+        try:
+            return list(pd.ExcelFile(file_path).sheet_names)
+        except Exception as exc:
+            raise ImportValidationError(f"Excel sheet bilgisi okunamadi: {exc}") from exc
+
+    def get_columns(self, file_path: Path, sheet_name: str | None = None) -> list[str]:
+        """Return source column names for a CSV or selected Excel sheet."""
+
+        self._ensure_supported_file(file_path)
+        try:
+            if file_path.suffix.lower() == ".csv":
+                dataframe = pd.read_csv(file_path, dtype=str, keep_default_na=False, nrows=0)
+            else:
+                dataframe = pd.read_excel(
+                    file_path,
+                    sheet_name=sheet_name,
+                    dtype=str,
+                    keep_default_na=False,
+                    nrows=0,
+                )
+        except Exception as exc:
+            raise ImportValidationError(f"Kolonlar okunamadi: {exc}") from exc
+        return [str(column) for column in dataframe.columns]
+
+    def import_file(
+        self,
+        file_path: Path,
+        *,
+        batch_name: str | None = None,
+        sheet_name: str | None = None,
+        column_mapping: dict[str, str] | None = None,
+    ) -> ImportResult:
         """Read an import file, persist valid rows, and report invalid rows."""
 
-        if not file_path.exists():
-            raise ImportValidationError(f"Dosya bulunamadi: {file_path}")
+        self._ensure_supported_file(file_path)
 
-        extension = file_path.suffix.lower()
-        if extension not in SUPPORTED_IMPORT_EXTENSIONS:
-            supported = ", ".join(SUPPORTED_IMPORT_EXTENSIONS)
-            raise UnsupportedFileTypeError(f"Desteklenmeyen dosya tipi. Desteklenen: {supported}.")
-
-        dataframe = self._read_dataframe(file_path)
-        dataframe = self._normalize_dataframe(dataframe)
+        effective_sheet_name = self._effective_sheet_name(file_path, sheet_name)
+        dataframe = self._read_dataframe(file_path, effective_sheet_name)
+        dataframe = self._apply_mapping_or_normalize(dataframe, column_mapping)
         validate_required_columns(dataframe.columns)
+        import_batch = self.repository.create_import_batch(
+            ImportBatchCreate(
+                name=self._batch_name(batch_name, file_path, effective_sheet_name),
+                source_file_name=file_path.name,
+                sheet_name=effective_sheet_name,
+            )
+        )
 
         records = []
         row_errors: list[RowValidationError] = []
@@ -101,6 +160,7 @@ class ImportService:
             created_record = self.repository.create(
                 InvoiceRecordCreate(
                     **validated_data,
+                    batch_id=import_batch.id,
                     kaynak_dosya=file_path.name,
                     kaynak_satir_no=source_row_number,
                 )
@@ -108,31 +168,92 @@ class ImportService:
             records.append(created_record)
 
         logger.info(
-            "Import completed | file=%s imported=%s failed=%s",
+            "Import completed | file=%s batch_id=%s sheet=%s imported=%s failed=%s",
             file_path.name,
+            import_batch.id,
+            effective_sheet_name,
             len(records),
             len(row_errors),
         )
 
         return ImportResult(
             source_file=file_path.name,
+            batch=import_batch,
             imported_count=len(records),
             failed_count=len(row_errors),
             records=records,
             row_errors=row_errors,
         )
 
-    def _read_dataframe(self, file_path: Path) -> pd.DataFrame:
+    def _ensure_supported_file(self, file_path: Path) -> None:
+        if not file_path.exists():
+            raise ImportValidationError(f"Dosya bulunamadi: {file_path}")
+
+        extension = file_path.suffix.lower()
+        if extension not in SUPPORTED_IMPORT_EXTENSIONS:
+            supported = ", ".join(SUPPORTED_IMPORT_EXTENSIONS)
+            raise UnsupportedFileTypeError(f"Desteklenmeyen dosya tipi. Desteklenen: {supported}.")
+
+    def _effective_sheet_name(self, file_path: Path, sheet_name: str | None) -> str | None:
+        if file_path.suffix.lower() == ".csv":
+            return "CSV"
+        sheet_names = self.get_sheet_names(file_path)
+        selected_sheet = sheet_name or sheet_names[0]
+        if selected_sheet not in sheet_names:
+            raise ImportValidationError(f"Sheet bulunamadi: {selected_sheet}")
+        return selected_sheet
+
+    def _read_dataframe(self, file_path: Path, sheet_name: str | None = None) -> pd.DataFrame:
         extension = file_path.suffix.lower()
         if extension == ".csv":
             return pd.read_csv(file_path, dtype=str, keep_default_na=False)
-        return pd.read_excel(file_path, dtype=str, keep_default_na=False)
+        return pd.read_excel(file_path, sheet_name=sheet_name, dtype=str, keep_default_na=False)
+
+    def _apply_mapping_or_normalize(
+        self,
+        dataframe: pd.DataFrame,
+        column_mapping: dict[str, str] | None,
+    ) -> pd.DataFrame:
+        if not column_mapping:
+            return self._normalize_dataframe(dataframe)
+
+        cleaned_mapping = {
+            target: source
+            for target, source in column_mapping.items()
+            if target in (*REQUIRED_IMPORT_COLUMNS, *OPTIONAL_IMPORT_COLUMNS) and source
+        }
+        missing_targets = [target for target in REQUIRED_IMPORT_COLUMNS if target not in cleaned_mapping]
+        if missing_targets:
+            raise ImportValidationError(
+                "Eksik kolon mapping alanlari: " + ", ".join(missing_targets)
+            )
+
+        missing_sources = [
+            source for source in cleaned_mapping.values() if source not in dataframe.columns
+        ]
+        if missing_sources:
+            raise ImportValidationError("Dosyada bulunamayan kolonlar: " + ", ".join(missing_sources))
+
+        mapped_data: dict[str, Any] = {}
+        for target, source in cleaned_mapping.items():
+            mapped_data[target] = dataframe[source]
+        if "aciklama" not in mapped_data:
+            mapped_data["aciklama"] = ""
+        return pd.DataFrame(mapped_data)
 
     def _normalize_dataframe(self, dataframe: pd.DataFrame) -> pd.DataFrame:
         normalized_columns = [normalize_column_name(column) for column in dataframe.columns]
         dataframe = dataframe.copy()
         dataframe.columns = normalized_columns
         return dataframe
+
+    def _batch_name(self, batch_name: str | None, file_path: Path, sheet_name: str | None) -> str:
+        normalized = (batch_name or "").strip()
+        if normalized:
+            return normalized
+        if sheet_name and sheet_name != "CSV":
+            return f"{file_path.stem} - {sheet_name}"
+        return file_path.stem
 
     def _row_to_clean_dict(self, row: dict[str, Any]) -> dict[str, Any]:
         clean_row: dict[str, Any] = {}

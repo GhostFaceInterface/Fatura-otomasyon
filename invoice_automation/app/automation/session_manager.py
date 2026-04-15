@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Any
 import logging
+from time import monotonic
 
 from invoice_automation.app.automation.browser_manager import BrowserManager
 from invoice_automation.app.automation.portal_selectors import PortalSelectors, portal_selectors
@@ -114,12 +115,17 @@ class PortalSessionManager:
             page.get_by_role("button", name=self.selectors.login_button_name).click()
             logger.info("Giris butonuna tiklandi")
 
-            self._wait_for_two_factor_page(page)
+            post_login_status = self._wait_for_post_login_state(page)
         except PortalSessionError:
             raise
         except Exception as exc:
             self._fail(f"Login akisi tamamlanamadi: {exc}", page)
             raise LoginFlowError(f"Login akisi tamamlanamadi: {exc}") from exc
+
+        if post_login_status == PortalSessionStatus.READY:
+            self._set_state(PortalSessionStatus.READY, "Login tamamlandi, session hazir.", page)
+            logger.info("Session 2FA olmadan hazir | url=%s", self._safe_current_url(page))
+            return self._state
 
         self._set_state(
             PortalSessionStatus.TWO_FACTOR_WAITING,
@@ -172,22 +178,30 @@ class PortalSessionManager:
             self._fail(message, self.browser_manager.page)
             raise MissingPortalCredentialsError(message)
 
-    def _wait_for_two_factor_page(self, page: Any) -> None:
-        try:
-            page.wait_for_url(
-                f"**{self.selectors.verification_url_marker}*",
-                timeout=self.settings.playwright_timeout_ms,
-            )
-        except Exception:
-            if not self._is_two_factor_code_visible(page):
-                self._fail("2FA sayfasi timeout icinde algilanamadi.", page)
-                raise TwoFactorTimeoutError("2FA sayfasi timeout icinde algilanamadi.")
+    def _wait_for_post_login_state(self, page: Any) -> PortalSessionStatus:
+        """Detect whether login led to 2FA or directly to a ready session."""
 
-        if not self._is_two_factor_code_visible(page):
-            self._fail("2FA kod alani gorunur degil.", page)
-            raise TwoFactorTimeoutError("2FA kod alani gorunur degil.")
+        deadline = monotonic() + (self.settings.playwright_timeout_ms / 1_000)
+        while monotonic() < deadline:
+            current_url = self._safe_current_url(page) or ""
+            if self.selectors.verification_url_marker in current_url or self._is_two_factor_code_visible(page):
+                if not self._is_two_factor_code_visible(page):
+                    self._fail("2FA kod alani gorunur degil.", page)
+                    raise TwoFactorTimeoutError("2FA kod alani gorunur degil.")
+                logger.info("2FA sayfasi algilandi | url=%s", current_url)
+                return PortalSessionStatus.TWO_FACTOR_WAITING
 
-        logger.info("2FA sayfasi algilandi | url=%s", self._safe_current_url(page))
+            if self._looks_logged_in_by_url(current_url) or self._is_session_ready_signal_visible(page):
+                logger.info("Login sonrasi session ready sinyali algilandi | url=%s", current_url)
+                return PortalSessionStatus.READY
+
+            try:
+                page.wait_for_timeout(500)
+            except Exception:
+                break
+
+        self._fail("Login sonrasi 2FA veya session ready sinyali algilanamadi.", page)
+        raise TwoFactorTimeoutError("Login sonrasi 2FA veya session ready sinyali algilanamadi.")
 
     def _is_two_factor_code_visible(self, page: Any) -> bool:
         try:
@@ -200,24 +214,30 @@ class PortalSessionManager:
             return False
 
     def _wait_for_session_ready(self, page: Any) -> None:
+        if self._looks_logged_in_by_url(self._safe_current_url(page) or ""):
+            return
+        if self._is_session_ready_signal_visible(page, timeout_ms=self.settings.playwright_timeout_ms):
+            return
+        self._fail("Session hazir degil; e-Arsiv menu linki gorunmedi.", page)
+        raise SessionNotReadyError("Session hazir degil; e-Arsiv menu linki gorunmedi.")
+
+    def _is_session_ready_signal_visible(self, page: Any, timeout_ms: int = 500) -> bool:
         try:
             page.get_by_role("link", name=self.selectors.earsiv_menu_link_name).wait_for(
                 state="visible",
-                timeout=self.settings.playwright_timeout_ms,
+                timeout=timeout_ms,
             )
-            return
+            return True
         except Exception:
-            current_url = self._safe_current_url(page) or ""
-            if self._looks_logged_in_by_url(current_url):
-                logger.info("Session ready accepted by URL fallback | url=%s", current_url)
-                return
-            self._fail("Session hazir degil; e-Arsiv menu linki gorunmedi.", page)
-            raise SessionNotReadyError("Session hazir degil; e-Arsiv menu linki gorunmedi.")
+            return False
 
     def _looks_logged_in_by_url(self, current_url: str) -> bool:
+        if not current_url:
+            return False
+        if self.selectors.home_index_url_marker in current_url:
+            return True
         return (
-            bool(current_url)
-            and self.selectors.verification_url_marker not in current_url
+            self.selectors.verification_url_marker not in current_url
             and current_url.rstrip("/") != self.settings.portal_login_url.rstrip("/")
         )
 

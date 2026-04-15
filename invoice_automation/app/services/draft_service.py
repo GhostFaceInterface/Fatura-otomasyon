@@ -19,6 +19,7 @@ from invoice_automation.app.utils.exceptions import (
     EFaturaMukellefiError,
     ElementNotFoundError,
     InvalidTCKNError,
+    NameMismatchError,
     PortalTimeoutError,
     SessionLostError,
     TurmobServiceError,
@@ -113,6 +114,8 @@ class SingleDraftService:
     def _status_for_exception(self, exc: Exception) -> InvoiceStatus:
         if isinstance(exc, InvalidTCKNError):
             return InvoiceStatus.FAILED_INVALID_TCKN
+        if isinstance(exc, NameMismatchError):
+            return InvoiceStatus.FAILED_NAME_MISMATCH
         if isinstance(exc, TurmobServiceError):
             return InvoiceStatus.FAILED_TURMOB_SERVICE_ERROR
         if isinstance(exc, EFaturaMukellefiError):

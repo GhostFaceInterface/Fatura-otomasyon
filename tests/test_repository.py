@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from invoice_automation.app.constants import InvoiceStatus
-from invoice_automation.app.db.models import InvoiceRecordCreate
+from invoice_automation.app.db.models import ImportBatchCreate, InvoiceRecordCreate
 from invoice_automation.app.db.repository import InvoiceRecordRepository
 
 
@@ -25,6 +25,40 @@ def test_repository_creates_and_lists_records(tmp_path: Path) -> None:
     assert len(records) == 1
     assert records[0].ad == "Ali"
     assert records[0].islem_durumu == InvoiceStatus.PENDING.value
+
+
+def test_repository_creates_import_batch_and_filters_records_by_batch(tmp_path: Path) -> None:
+    repository = InvoiceRecordRepository(tmp_path / "test.sqlite3")
+    april = repository.create_import_batch(
+        ImportBatchCreate(name="Nisan", source_file_name="nisan.xlsx", sheet_name="Sayfa1")
+    )
+    may = repository.create_import_batch(
+        ImportBatchCreate(name="Mayis", source_file_name="mayis.xlsx", sheet_name="Sayfa1")
+    )
+    repository.create(
+        InvoiceRecordCreate(
+            batch_id=april.id,
+            ad="Ali",
+            soyad="Yilmaz",
+            tc_kimlik_no="12345678901",
+            tutar_usd=1500.0,
+        )
+    )
+    repository.create(
+        InvoiceRecordCreate(
+            batch_id=may.id,
+            ad="Ayse",
+            soyad="Demir",
+            tc_kimlik_no="10987654321",
+            tutar_usd=2200.0,
+        )
+    )
+
+    april_records = repository.list_all(batch_id=april.id)
+
+    assert [batch.name for batch in repository.list_import_batches()] == ["Mayis", "Nisan"]
+    assert len(april_records) == 1
+    assert april_records[0].ad == "Ali"
 
 
 def test_repository_filters_by_status(tmp_path: Path) -> None:

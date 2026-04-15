@@ -23,26 +23,27 @@ class BatchService:
         self.repository = repository or InvoiceRecordRepository()
         self.runner = runner
 
-    def preview(self) -> BatchPreview:
+    def preview(self, batch_id: int | None = None) -> BatchPreview:
         """Return a read-only preview of currently selected records."""
 
-        selected_records = self.repository.list_selected()
+        effective_batch_id = self._effective_batch_id(batch_id)
+        selected_records = self.repository.list_selected_for_batch(batch_id=effective_batch_id)
         total_amount = sum(record.tutar_usd for record in selected_records)
         return BatchPreview(
             total_selected=len(selected_records),
             total_amount_usd=total_amount,
-            status_counts=self.repository.count_by_status(),
+            status_counts=self.repository.count_by_status(batch_id=effective_batch_id),
             records=selected_records,
         )
 
-    def prepare_selected_batch(self) -> BatchPreview:
+    def prepare_selected_batch(self, batch_id: int | None = None) -> BatchPreview:
         """Prepare the selected records for processing.
 
         Phase 2 does not run portal automation. This method is the stable entry
         point that later phases will extend with session and browser checks.
         """
 
-        preview = self.preview()
+        preview = self.preview(batch_id=batch_id)
         logger.info(
             "Batch prepared | total_selected=%s total_amount_usd=%.2f",
             preview.total_selected,
@@ -50,11 +51,16 @@ class BatchService:
         )
         return preview
 
-    def run_selected_batch(self) -> BatchRunReport:
+    def run_selected_batch(self, batch_id: int | None = None) -> BatchRunReport:
         """Run selected eligible records sequentially and return the final report."""
 
-        selected_records = self.repository.list_selected_for_batch()
-        logger.info("Batch run istegi alindi | eligible_selected=%s", len(selected_records))
+        effective_batch_id = self._effective_batch_id(batch_id)
+        selected_records = self.repository.list_selected_for_batch(batch_id=effective_batch_id)
+        logger.info(
+            "Batch run istegi alindi | batch_id=%s eligible_selected=%s",
+            effective_batch_id,
+            len(selected_records),
+        )
         runner = self.runner or BatchRunner(
             draft_service=SingleDraftService(repository=self.repository),
         )
@@ -68,3 +74,9 @@ class BatchService:
             report.aborted_count,
         )
         return report
+
+    def _effective_batch_id(self, batch_id: int | None) -> int | None:
+        if batch_id is not None:
+            return batch_id
+        latest_batch = self.repository.latest_import_batch()
+        return latest_batch.id if latest_batch else None

@@ -56,6 +56,10 @@ class InvalidTCKNError(DraftAutomationError):
     """Raised when portal customer lookup rejects the TCKN."""
 
 
+class NameMismatchError(DraftAutomationError):
+    """Raised when Turmob customer name does not match the local record."""
+
+
 class TurmobServiceError(DraftAutomationError):
     """Raised when Turmob lookup returns a portal service error."""
 

@@ -5,13 +5,34 @@
   <div class="section-header">
     <div>
       <h2>Kayitlar</h2>
-      <p>Faz 2 kapsaminda PENDING kayitlar secilebilir ve batch hazirligina alinabilir.</p>
+      <p>Secilen fatura donemine ait PENDING kayitlar secilebilir ve batch hazirligina alinabilir.</p>
     </div>
     <div class="header-actions">
       <a class="button-link secondary" href="/">Yeni Dosya Yukle</a>
-      <a class="button-link" href="/batch">Batch Hazirligi</a>
+      {% if active_batch %}
+      <a class="button-link" href="/batch?batch_id={{ active_batch.id }}">Batch Hazirligi</a>
+      {% endif %}
     </div>
   </div>
+
+  <form class="upload-form" action="/records" method="get">
+    <label for="batch_id">Fatura Donemi</label>
+    <select id="batch_id" name="batch_id" required>
+      {% for batch in batches %}
+      <option value="{{ batch.id }}" {% if active_batch and batch.id == active_batch.id %}selected{% endif %}>{{ batch.name }}</option>
+      {% endfor %}
+    </select>
+    {% if selected_status %}
+    <input type="hidden" name="status" value="{{ selected_status }}">
+    {% endif %}
+    <button type="submit" class="secondary-button">Donemi Ac</button>
+  </form>
+
+  {% if active_batch %}
+  <p class="muted">Aktif donem: <strong>{{ active_batch.name }}</strong> ({{ active_batch.source_file_name }} / {{ active_batch.sheet_name or "-" }})</p>
+  {% else %}
+  <div class="alert inline-error">Henuz fatura donemi yok. Once veri yukleyip batch/fatura donemi olusturun.</div>
+  {% endif %}
 
   {% if selection_saved %}
   <div class="alert inline-success">
@@ -20,24 +41,33 @@
   {% endif %}
 
   <div class="filters">
-    <a class="{{ 'active' if not selected_status else '' }}" href="/records">Tum Durumlar</a>
+    <a class="{{ 'active' if not selected_status else '' }}" href="/records{% if active_batch %}?batch_id={{ active_batch.id }}{% endif %}">Tum Durumlar</a>
     {% for status in statuses %}
-      <a class="{{ 'active' if selected_status == status else '' }}" href="/records?status={{ status }}">{{ status }}</a>
+      <a class="{{ 'active' if selected_status == status else '' }}" href="/records?{% if active_batch %}batch_id={{ active_batch.id }}&{% endif %}status={{ status }}">{{ status }}</a>
     {% endfor %}
   </div>
 
   <form action="/records/selection" method="post">
+    {% if active_batch %}
+    <input type="hidden" name="batch_id" value="{{ active_batch.id }}">
+    {% endif %}
     <div class="table-actions">
       <div>Secili kayit sayisi: <strong>{{ selected_count }}</strong></div>
-      <button type="submit">Secimi Kaydet</button>
+      <button type="submit" {% if not active_batch %}disabled{% endif %}>Secimi Kaydet</button>
     </div>
 
     <table>
       <thead>
         <tr>
-          <th>Sec</th>
+          <th>
+            <label>
+              <input id="select-all-records" type="checkbox">
+              Tumunu Sec
+            </label>
+          </th>
           <th>ID</th>
-          <th>Ad Soyad</th>
+          <th>Ad</th>
+          <th>Soyad</th>
           <th>TCKN</th>
           <th>Tutar USD</th>
           <th>Durum</th>
@@ -50,13 +80,14 @@
         <tr>
           <td>
             {% if record.islem_durumu in ["PENDING", "SELECTED"] %}
-              <input type="checkbox" name="selected_record_ids" value="{{ record.id }}" {% if record.secili_mi %}checked{% endif %}>
+              <input class="record-select-checkbox" type="checkbox" name="selected_record_ids" value="{{ record.id }}" {% if record.secili_mi %}checked{% endif %}>
             {% else %}
               <input type="checkbox" {% if record.secili_mi %}checked{% endif %} disabled>
             {% endif %}
           </td>
           <td>{{ record.id }}</td>
-          <td>{{ record.ad }} {{ record.soyad }}</td>
+          <td>{{ record.ad }}</td>
+          <td>{{ record.soyad }}</td>
           <td>{{ record.tc_kimlik_no }}</td>
           <td>{{ "%.2f"|format(record.tutar_usd) }}</td>
           <td><span class="status">{{ record.islem_durumu }}</span></td>
@@ -65,11 +96,22 @@
         </tr>
         {% else %}
         <tr>
-          <td colspan="8" class="empty">Kayit bulunamadi.</td>
+          <td colspan="9" class="empty">Kayit bulunamadi.</td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
   </form>
 </section>
+
+<script>
+  const selectAll = document.getElementById("select-all-records");
+  if (selectAll) {
+    selectAll.addEventListener("change", () => {
+      document.querySelectorAll(".record-select-checkbox").forEach((checkbox) => {
+        checkbox.checked = selectAll.checked;
+      });
+    });
+  }
+</script>
 {% endblock %}

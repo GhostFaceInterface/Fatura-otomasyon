@@ -2,12 +2,15 @@
 
 - FastAPI uygulamasi server-rendered Jinja2 ekranlari ve hafif JSON API sunar.
 - SQLite erisimi repository katmaninda toplanir.
+- Import/fatura donemleri `import_batches` tablosunda, kayitlar `invoice_records.batch_id` ile tutulur.
 - Import ve validasyon servisleri UI route'larindan ayridir.
+- Import akisi dosya inspection, sheet secimi ve explicit kolon mapping destekler; alias mapping fallback olarak kalir.
 - Secim kurallari `SelectionService` icinde tutulur; repository sadece kontrollu PENDING/SELECTED gecislerini uygular.
-- Batch hazirligi `BatchService` uzerinden preview kontratiyla baslatilir.
+- Secim ve batch hazirligi aktif fatura donemi baglaminda calisir.
 - Playwright lifecycle `BrowserManager` icinde tutulur.
 - Portal login ve manuel 2FA state akisi `PortalSessionManager` uzerinden yonetilir.
 - e-Arsiv sayfa navigasyonu `EArchiveNavigation`, form doldurma `InvoiceFormFiller`, hata hook'lari `PortalErrorDetector`, tek kayit orchestration `DraftCreator` icinde tutulur.
+- Turmob sonrasi ad/soyad kontrolu `InvoiceFormFiller` icinde yapilir; uyusmazlik typed exception ile status'a map edilir.
 - Tek kayit draft DB/status akisi `SingleDraftService` ile repository'ye yazilir.
 - Gercek portal dialoglari `PortalErrorDetector` tarafindan okunur, OK ile kapatilir, screenshot alinir ve typed exception'a donusturulur.
 - Coklu isleme `BatchRunner` tarafindan sirali olarak yapilir; runner tek kayit akisini `SingleDraftService` uzerinden cagirir.

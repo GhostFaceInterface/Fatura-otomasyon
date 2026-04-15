@@ -6,7 +6,7 @@ from invoice_automation.app.constants import InvoiceStatus
 from invoice_automation.app.db.models import InvoiceRecordCreate
 from invoice_automation.app.db.repository import InvoiceRecordRepository
 from invoice_automation.app.services.draft_service import SingleDraftService
-from invoice_automation.app.utils.exceptions import InvalidTCKNError, TurmobServiceError
+from invoice_automation.app.utils.exceptions import InvalidTCKNError, NameMismatchError, TurmobServiceError
 
 
 class FakeBrowserManager:
@@ -46,6 +46,11 @@ class InvalidTcknDraftCreator:
 class TurmobServiceDraftCreator:
     def create_draft(self, page: object, record) -> DraftCreationResult:
         raise TurmobServiceError("Servis hatası oluştu !", stage="turmob_lookup")
+
+
+class NameMismatchDraftCreator:
+    def create_draft(self, page: object, record) -> DraftCreationResult:
+        raise NameMismatchError("Turmob ad/soyad eslesmedi.", stage="name_verification")
 
 
 def _repository_with_record(tmp_path: Path) -> tuple[InvoiceRecordRepository, int]:
@@ -107,6 +112,22 @@ def test_single_draft_service_maps_turmob_service_error_to_failed_status(tmp_pat
     assert result.ok is False
     assert result.record.islem_durumu == InvoiceStatus.FAILED_TURMOB_SERVICE_ERROR.value
     assert result.record.hata_kodu == "TurmobServiceError"
+
+
+def test_single_draft_service_maps_name_mismatch_to_failed_status(tmp_path: Path) -> None:
+    repository, record_id = _repository_with_record(tmp_path)
+    service = SingleDraftService(
+        repository=repository,
+        session_manager=FakeSessionManager(PortalSessionStatus.READY),
+        draft_creator=NameMismatchDraftCreator(),
+    )
+
+    result = service.create_for_record(record_id)
+
+    assert result.ok is False
+    assert result.record.islem_durumu == InvoiceStatus.FAILED_NAME_MISMATCH.value
+    assert result.record.hata_kodu == "NameMismatchError"
+    assert result.record.secili_mi is True
     assert result.record.secili_mi is True
 
 

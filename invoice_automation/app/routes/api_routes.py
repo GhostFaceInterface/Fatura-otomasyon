@@ -21,11 +21,14 @@ def health() -> dict[str, str]:
 
 
 @router.get("/records")
-def list_records(status: str | None = Query(default=None)) -> dict[str, object]:
+def list_records(
+    status: str | None = Query(default=None),
+    batch_id: int | None = Query(default=None),
+) -> dict[str, object]:
     """Return invoice records as JSON."""
 
     repository = InvoiceRecordRepository()
-    records = repository.list_all(status=status)
+    records = repository.list_all(status=status, batch_id=batch_id)
     return {
         "count": len(records),
         "records": [record.to_dict() for record in records],
@@ -33,17 +36,17 @@ def list_records(status: str | None = Query(default=None)) -> dict[str, object]:
 
 
 @router.get("/batch/preview")
-def batch_preview() -> dict[str, object]:
+def batch_preview(batch_id: int | None = Query(default=None)) -> dict[str, object]:
     """Return the current batch preparation preview."""
 
-    return BatchService().preview().to_dict()
+    return BatchService().preview(batch_id=batch_id).to_dict()
 
 
 @router.post("/batch/run")
-def run_batch() -> dict[str, object]:
+def run_batch(batch_id: int | None = Query(default=None)) -> dict[str, object]:
     """Run selected eligible records and return the batch report."""
 
-    return BatchService().run_selected_batch().to_dict()
+    return BatchService().run_selected_batch(batch_id=batch_id).to_dict()
 
 
 @router.get("/session/status")

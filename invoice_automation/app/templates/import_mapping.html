@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="section">
+  <div class="section-header">
+    <div>
+      <h2>Import Esleştirme</h2>
+      <p>{{ inspection.source_file }} dosyasi icin sheet ve kolon eslestirmesi yapin.</p>
+    </div>
+    <a class="button-link secondary" href="/">Yeni Dosya Yukle</a>
+  </div>
+
+  <form action="/import/inspect" method="post" class="upload-form">
+    <input type="hidden" name="saved_path" value="{{ saved_path }}">
+    <label for="sheet_name">Sheet</label>
+    <select id="sheet_name" name="sheet_name">
+      {% for sheet in inspection.sheet_names %}
+      <option value="{{ sheet }}" {% if sheet == inspection.selected_sheet %}selected{% endif %}>{{ sheet }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit" class="secondary-button">Sheet Kolonlarini Yukle</button>
+  </form>
+</section>
+
+<section class="section">
+  <h2>Kolon Mapping ve Fatura Donemi</h2>
+  <form action="/import/confirm" method="post">
+    <input type="hidden" name="saved_path" value="{{ saved_path }}">
+    <input type="hidden" name="sheet_name" value="{{ inspection.selected_sheet }}">
+
+    <div class="mapping-grid">
+      <label>
+        Fatura donemi adi
+        <input name="batch_name" type="text" placeholder="2026-04 Nisan Faturalari" required>
+      </label>
+
+      <label>
+        ad
+        <select name="map_ad" required>
+          <option value="">Kolon secin</option>
+          {% for column in inspection.columns %}
+          <option value="{{ column }}" {% if default_mapping.get("ad") == column %}selected{% endif %}>{{ column }}</option>
+          {% endfor %}
+        </select>
+      </label>
+
+      <label>
+        soyad
+        <select name="map_soyad" required>
+          <option value="">Kolon secin</option>
+          {% for column in inspection.columns %}
+          <option value="{{ column }}" {% if default_mapping.get("soyad") == column %}selected{% endif %}>{{ column }}</option>
+          {% endfor %}
+        </select>
+      </label>
+
+      <label>
+        tc_kimlik_no
+        <select name="map_tc_kimlik_no" required>
+          <option value="">Kolon secin</option>
+          {% for column in inspection.columns %}
+          <option value="{{ column }}" {% if default_mapping.get("tc_kimlik_no") == column %}selected{% endif %}>{{ column }}</option>
+          {% endfor %}
+        </select>
+      </label>
+
+      <label>
+        tutar_usd
+        <select name="map_tutar_usd" required>
+          <option value="">Kolon secin</option>
+          {% for column in inspection.columns %}
+          <option value="{{ column }}" {% if default_mapping.get("tutar_usd") == column %}selected{% endif %}>{{ column }}</option>
+          {% endfor %}
+        </select>
+      </label>
+
+      <label>
+        aciklama
+        <select name="map_aciklama">
+          <option value="">Bos birak</option>
+          {% for column in inspection.columns %}
+          <option value="{{ column }}" {% if default_mapping.get("aciklama") == column %}selected{% endif %}>{{ column }}</option>
+          {% endfor %}
+        </select>
+      </label>
+    </div>
+
+    <div class="table-actions">
+      <button type="submit">Onizleme Mapping ile Import Et</button>
+    </div>
+  </form>
+</section>
+
+<section class="section">
+  <h2>Sheet Kolonlari</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Kolon Adi</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for column in inspection.columns %}
+      <tr>
+        <td>{{ loop.index }}</td>
+        <td>{{ column }}</td>
+      </tr>
+      {% else %}
+      <tr>
+        <td colspan="2" class="empty">Kolon bulunamadi.</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

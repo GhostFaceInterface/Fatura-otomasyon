@@ -74,6 +74,7 @@ class FakeDraftPage:
 def _record() -> InvoiceRecord:
     return InvoiceRecord(
         id=11,
+        batch_id=1,
         ad="Ali",
         soyad="Yilmaz",
         tc_kimlik_no="12345678901",

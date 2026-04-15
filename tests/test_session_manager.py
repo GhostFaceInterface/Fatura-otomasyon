@@ -19,6 +19,8 @@ class FakeLocator:
 
     def click(self) -> None:
         self.page.actions.append(("click", self.locator_name))
+        if self.locator_name == "role:button:Giriş" and self.page.login_target_url:
+            self.page.url = self.page.login_target_url
 
     def wait_for(self, state: str = "visible", timeout: int = 0) -> None:
         self.page.actions.append(("wait_for", self.locator_name, state, timeout))
@@ -31,6 +33,9 @@ class FakePage:
         self.url = "about:blank"
         self.actions: list[tuple] = []
         self.wait_failures: set[str] = set()
+        self.login_target_url = (
+            "https://portal.hizliteknoloji.com.tr/User/VerificationUser?verificationType=Mail"
+        )
 
     def goto(self, url: str, wait_until: str, timeout: int) -> None:
         self.url = url
@@ -39,6 +44,9 @@ class FakePage:
     def wait_for_url(self, pattern: str, timeout: int) -> None:
         self.url = "https://portal.hizliteknoloji.com.tr/User/VerificationUser?verificationType=Mail"
         self.actions.append(("wait_for_url", pattern, timeout))
+
+    def wait_for_timeout(self, timeout_ms: int) -> None:
+        self.actions.append(("wait_for_timeout", timeout_ms))
 
     def get_by_role(self, role: str, name: str) -> FakeLocator:
         return FakeLocator(self, f"role:{role}:{name}")
@@ -90,13 +98,24 @@ def test_start_login_fills_credentials_and_waits_for_2fa() -> None:
     assert ("fill", "role:textbox:Kullanıcı Adı", "user") in page.actions
     assert ("fill", "role:textbox:Şifre", "password") in page.actions
     assert ("click", "role:button:Giriş") in page.actions
-    assert any(action[0] == "wait_for_url" for action in page.actions)
     assert any(action[1] == "placeholder:Kod" for action in page.actions if action[0] == "wait_for")
+
+
+def test_start_login_marks_ready_when_2fa_is_not_required() -> None:
+    page = FakePage()
+    page.login_target_url = "https://portal.hizliteknoloji.com.tr/Home/Index"
+    page.wait_failures.add("placeholder:Kod")
+    manager = PortalSessionManager(FakeBrowserManager(page), _settings())
+
+    state = manager.start_login()
+
+    assert state.status == PortalSessionStatus.READY
+    assert state.current_url == "https://portal.hizliteknoloji.com.tr/Home/Index"
 
 
 def test_confirm_manual_2fa_marks_session_ready_when_earsiv_link_visible() -> None:
     page = FakePage()
-    page.url = "https://portal.hizliteknoloji.com.tr/Dashboard"
+    page.url = "https://portal.hizliteknoloji.com.tr/User/VerificationUser?verificationType=Mail"
     manager = PortalSessionManager(FakeBrowserManager(page), _settings())
 
     state = manager.confirm_manual_2fa_completed()

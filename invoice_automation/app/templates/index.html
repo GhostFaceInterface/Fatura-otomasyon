@@ -3,12 +3,12 @@
 {% block content %}
 <section class="section">
   <h2>Veri Yukleme</h2>
-  <p>CSV veya Excel dosyasi yukleyin. Minimum kolonlar: <code>ad</code>, <code>soyad</code>, <code>tc_kimlik_no</code>, <code>tutar_usd</code>, <code>aciklama</code>.</p>
+  <p>CSV veya Excel dosyasi yukleyin. Sonraki ekranda sheet, kolon mapping ve fatura donemi adini sececeksiniz.</p>
 
   <form class="upload-form" action="/import" method="post" enctype="multipart/form-data">
     <label for="file">Import dosyasi</label>
     <input id="file" name="file" type="file" accept=".csv,.xlsx,.xls" required>
-    <button type="submit">Dosyayi Import Et</button>
+    <button type="submit">Dosyayi Yukle ve Esleştir</button>
   </form>
 </section>
 
@@ -22,8 +22,15 @@
 {% if result %}
 <section class="alert alert-success">
   <h2>Import tamamlandi</h2>
+  {% if result.batch %}
+  <p>Fatura donemi: <strong>{{ result.batch.name }}</strong></p>
+  {% endif %}
   <p><strong>{{ result.imported_count }}</strong> kayit eklendi, <strong>{{ result.failed_count }}</strong> satir atlandi.</p>
+  {% if result.batch %}
+  <p><a href="/records?batch_id={{ result.batch.id }}">Bu donemin kayitlarini goruntule</a></p>
+  {% else %}
   <p><a href="/records">Kayitlari goruntule</a></p>
+  {% endif %}
 </section>
 
 {% if result.row_errors %}
@@ -48,4 +55,36 @@
 </section>
 {% endif %}
 {% endif %}
+
+<section class="section">
+  <h2>Fatura Donemleri</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Ad</th>
+        <th>Dosya</th>
+        <th>Sheet</th>
+        <th>Olusturma</th>
+        <th>Aksiyon</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for batch in batches %}
+      <tr>
+        <td>{{ batch.id }}</td>
+        <td>{{ batch.name }}</td>
+        <td>{{ batch.source_file_name }}</td>
+        <td>{{ batch.sheet_name or "-" }}</td>
+        <td>{{ batch.created_at }}</td>
+        <td><a href="/records?batch_id={{ batch.id }}">Kayitlari Ac</a></td>
+      </tr>
+      {% else %}
+      <tr>
+        <td colspan="6" class="empty">Henuz fatura donemi yok.</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
 {% endblock %}

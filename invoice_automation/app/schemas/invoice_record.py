@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from invoice_automation.app.db.models import InvoiceRecord
+from invoice_automation.app.db.models import ImportBatch, InvoiceRecord
 
 
 @dataclass(frozen=True)
@@ -18,10 +18,21 @@ class RowValidationError:
 
 
 @dataclass(frozen=True)
+class ImportSheetInspection:
+    """Sheet and column metadata for an uploaded import file."""
+
+    source_file: str
+    sheet_names: list[str]
+    selected_sheet: str
+    columns: list[str]
+
+
+@dataclass(frozen=True)
 class ImportResult:
     """Summary returned after importing an Excel or CSV file."""
 
     source_file: str
+    batch: ImportBatch | None
     imported_count: int
     failed_count: int
     records: list[InvoiceRecord] = field(default_factory=list)
@@ -38,6 +49,7 @@ class ImportResult:
 
         return {
             "source_file": self.source_file,
+            "batch": self.batch.to_dict() if self.batch else None,
             "imported_count": self.imported_count,
             "failed_count": self.failed_count,
             "row_errors": [

@@ -5,13 +5,29 @@
   <div class="section-header">
     <div>
       <h2>Batch Hazirligi</h2>
-      <p>Secili PENDING/SELECTED kayitlar sirayla taslak olusturma akisina verilir.</p>
+      <p>Aktif fatura donemindeki secili PENDING/SELECTED kayitlar sirayla taslak olusturma akisina verilir.</p>
     </div>
     <div class="header-actions">
-      <a class="button-link secondary" href="/records">Kayit Secimine Don</a>
+      <a class="button-link secondary" href="/records{% if active_batch %}?batch_id={{ active_batch.id }}{% endif %}">Kayit Secimine Don</a>
       <a class="button-link" href="/draft">Tek Kayit Draft POC</a>
     </div>
   </div>
+
+  <form class="upload-form" action="/batch" method="get">
+    <label for="batch_id">Fatura Donemi</label>
+    <select id="batch_id" name="batch_id" required>
+      {% for batch in batches %}
+      <option value="{{ batch.id }}" {% if active_batch and batch.id == active_batch.id %}selected{% endif %}>{{ batch.name }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit" class="secondary-button">Donemi Ac</button>
+  </form>
+
+  {% if active_batch %}
+  <p class="muted">Aktif donem: <strong>{{ active_batch.name }}</strong> ({{ active_batch.source_file_name }} / {{ active_batch.sheet_name or "-" }})</p>
+  {% else %}
+  <div class="alert inline-error">Batch baslatmak icin once bir fatura donemi olusturun.</div>
+  {% endif %}
 
   {% if prepared %}
   <div class="alert inline-success">
@@ -39,11 +55,17 @@
   </div>
 
   <form action="/batch/prepare" method="post" class="batch-form">
-    <button type="submit" {% if preview.total_selected == 0 %}disabled{% endif %}>Batch'e Hazirla</button>
+    {% if active_batch %}
+    <input type="hidden" name="batch_id" value="{{ active_batch.id }}">
+    {% endif %}
+    <button type="submit" {% if preview.total_selected == 0 or not active_batch %}disabled{% endif %}>Batch'e Hazirla</button>
   </form>
 
   <form action="/batch/run" method="post" class="batch-form">
-    <button type="submit" {% if preview.total_selected == 0 %}disabled{% endif %}>
+    {% if active_batch %}
+    <input type="hidden" name="batch_id" value="{{ active_batch.id }}">
+    {% endif %}
+    <button type="submit" {% if preview.total_selected == 0 or not active_batch %}disabled{% endif %}>
       Secilileri Taslak Olustur
     </button>
   </form>

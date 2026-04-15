@@ -102,6 +102,29 @@ Notlar:
 - Hata sonrasi dialog Faz 5 katmaninda kapandiktan sonra form state'i terk edilip yeni olustur ekranina donulur.
 - Bu faz websocket/canli progress kurmaz; senkron post/response sonuc raporu verir.
 
+## Faz 7 oncesi kritik tamamlamalar
+
+Tamamlandi:
+
+- `import_batches` tablosu ve `invoice_records.batch_id` alanlari eklendi.
+- Var olan lokal SQLite dosyalari icin additive migration mantigi eklendi.
+- Import servisi sheet inspection, sheet secimi ve kolon mapping destekler.
+- CSV import geriye uyumlu kalir; Excel icin kullanici secilen sheet'i import eder.
+- Import sirasinda batch/fatura donemi adi alinir ve kayitlar o doneme baglanir.
+- Records ekrani aktif fatura donemiyle calisir, ad/soyad ayri kolonlarda gosterilir.
+- Records ekraninda uygun kayitlar icin tumunu sec checkbox'i vardir.
+- Batch preview/run aktif fatura donemi icindeki secili PENDING/SELECTED kayitlarla calisir.
+- Login sonrasi 2FA sayfasi, `/Home/Index` veya e-Arsiv menu sinyali ayirt edilir.
+- 2FA gerekmezse session dogrudan READY olur.
+- Turmob sonrasi portal ad/soyad alanlari okunur ve SQLite kaydiyla normalize edilerek karsilastirilir.
+- Ad/soyad uyusmazligi `NameMismatchError` -> `FAILED_NAME_MISMATCH` olarak status'a yazilir.
+
+Notlar:
+
+- Fatura donemi izolasyonu artik operasyonel batch secimini belirler.
+- Otomatik kolon alias mapping kaldirilmadi; explicit UI mapping birinci sinif akisa eklendi.
+- Name mismatch kayit bazli hata kabul edilir, batch'i durdurmaz.
+
 Henuz tamamlanmayan sonraki isler:
 
 - Faz 7: sertlestirme ve dokumantasyon iyilestirme

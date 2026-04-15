@@ -16,6 +16,7 @@ from invoice_automation.app.config import ROOT_DIR, ensure_runtime_directories, 
 from invoice_automation.app.constants import InvoiceStatus
 from invoice_automation.app.db.repository import InvoiceRecordRepository
 from invoice_automation.app.services.batch_service import BatchService
+from invoice_automation.app.services.draft_service import SingleDraftService
 from invoice_automation.app.services.import_service import ImportService
 from invoice_automation.app.services.selection_service import SelectionService
 from invoice_automation.app.utils.exceptions import ImportValidationError, PortalSessionError
@@ -128,6 +129,52 @@ def prepare_batch(request: Request) -> HTMLResponse:
             "request": request,
             "preview": preview,
             "prepared": True,
+        },
+    )
+
+
+@router.get("/draft", response_class=HTMLResponse)
+def draft(request: Request) -> HTMLResponse:
+    """Render single-record draft creation POC screen."""
+
+    repository = InvoiceRecordRepository()
+    selected_records = repository.list_selected()
+    records = selected_records or repository.list_all()
+    return templates.TemplateResponse(
+        "draft.html",
+        {
+            "request": request,
+            "records": records,
+            "using_selected_records": bool(selected_records),
+            "result": None,
+            "error": None,
+        },
+    )
+
+
+@router.post("/draft/create", response_class=HTMLResponse)
+def create_single_draft(request: Request, record_id: int = Form(...)) -> HTMLResponse:
+    """Run Phase 4 POC for one selected record."""
+
+    repository = InvoiceRecordRepository()
+    result = None
+    error = None
+    try:
+        result = SingleDraftService(repository=repository).create_for_record(record_id)
+    except ValueError as exc:
+        error = str(exc)
+        logger.info("Draft POC rejected | record_id=%s error=%s", record_id, error)
+
+    selected_records = repository.list_selected()
+    records = selected_records or repository.list_all()
+    return templates.TemplateResponse(
+        "draft.html",
+        {
+            "request": request,
+            "records": records,
+            "using_selected_records": bool(selected_records),
+            "result": result,
+            "error": error,
         },
     )
 

@@ -35,3 +35,31 @@ class TwoFactorTimeoutError(PortalSessionError):
 
 class SessionNotReadyError(PortalSessionError):
     """Raised when login completed state cannot be verified."""
+
+
+class DraftAutomationError(InvoiceAutomationError):
+    """Base exception for draft invoice automation errors."""
+
+
+class InvalidTCKNError(DraftAutomationError):
+    """Raised when portal customer lookup rejects the TCKN."""
+
+
+class EFaturaMukellefiError(DraftAutomationError):
+    """Raised when the customer cannot be processed as e-Arsiv."""
+
+
+class PortalTimeoutError(DraftAutomationError):
+    """Raised when a portal interaction times out."""
+
+
+class ElementNotFoundError(DraftAutomationError):
+    """Raised when an expected portal element cannot be found."""
+
+
+class SessionLostError(DraftAutomationError):
+    """Raised when the logged-in portal session is not usable."""
+
+
+class DraftCreationError(DraftAutomationError):
+    """Raised when draft creation fails for an unknown portal reason."""

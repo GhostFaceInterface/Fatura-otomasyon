@@ -14,6 +14,18 @@ class PortalSelectors:
     two_factor_submit_button_name: str = "Doğrula"
     earsiv_menu_link_name: str = " e-Arşiv "
     verification_url_marker: str = "/User/VerificationUser"
+    earsiv_create_link_name: str = " e-Arşiv Oluştur"
+    document_currency_selector: str = "#DocumentCurrencyCode"
+    getir_text: str = "Getir"
+    identification_selector: str = "#txtIdentificationID"
+    turmob_search_text: str = "Türmob Müsteri Sorgula"
+    city_selector: str = "#txtIl"
+    district_selector: str = "#txtIlce"
+    service_name_selector: str = "#MalAdi"
+    price_amount_selector: str = 'input[name="Price_Amount"]'
+    tax_selector: str = "#Tax_Perc0015"
+    exemption_selector: str = 'select[name="istisnaListname"]'
+    save_draft_button_name: str = "Taslak Kaydet   "
 
 
 portal_selectors = PortalSelectors()

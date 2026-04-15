@@ -187,6 +187,54 @@ class InvoiceRecordRepository:
             ).fetchall()
         return {str(row["islem_durumu"]): int(row["total"]) for row in rows}
 
+    def update_processing_state(
+        self,
+        record_id: int,
+        status: InvoiceStatus,
+        portal_ref_no: str | None = None,
+        hata_kodu: str | None = None,
+        hata_mesaji: str | None = None,
+        secili_mi: bool | None = None,
+    ) -> InvoiceRecord:
+        """Update processing status and return the refreshed record."""
+
+        now = utc_timestamp()
+        assignments = [
+            "islem_durumu = ?",
+            "portal_ref_no = ?",
+            "hata_kodu = ?",
+            "hata_mesaji = ?",
+            "guncelleme_zamani = ?",
+        ]
+        values: list[object] = [
+            status.value,
+            portal_ref_no,
+            hata_kodu,
+            hata_mesaji,
+            now,
+        ]
+
+        if secili_mi is not None:
+            assignments.append("secili_mi = ?")
+            values.append(int(secili_mi))
+
+        values.append(record_id)
+
+        with self._connect() as connection:
+            connection.execute(
+                f"""
+                UPDATE invoice_records
+                SET {", ".join(assignments)}
+                WHERE id = ?
+                """,
+                values,
+            )
+
+        updated = self.get(record_id)
+        if updated is None:
+            raise RuntimeError(f"Invoice record not found after status update: {record_id}")
+        return updated
+
     def count(self) -> int:
         """Return total record count."""
 

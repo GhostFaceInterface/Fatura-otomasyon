@@ -7,6 +7,7 @@ from fastapi import APIRouter, Query
 from invoice_automation.app.automation.session_manager import portal_session_manager
 from invoice_automation.app.db.repository import InvoiceRecordRepository
 from invoice_automation.app.services.batch_service import BatchService
+from invoice_automation.app.services.draft_service import SingleDraftService
 from invoice_automation.app.utils.exceptions import PortalSessionError
 
 router = APIRouter(prefix="/api", tags=["api"])
@@ -72,3 +73,14 @@ def close_session() -> dict[str, object]:
     """Close active browser session."""
 
     return {"ok": True, "state": portal_session_manager.close().to_dict()}
+
+
+@router.post("/draft/create")
+def create_single_draft(record_id: int = Query(...)) -> dict[str, object]:
+    """Create one draft invoice using the ready portal session."""
+
+    try:
+        result = SingleDraftService().create_for_record(record_id)
+        return result.to_dict()
+    except ValueError as exc:
+        return {"ok": False, "error_code": exc.__class__.__name__, "message": str(exc)}

@@ -112,3 +112,29 @@ def test_repository_does_not_select_finished_records(tmp_path: Path) -> None:
     assert selected_count == 0
     assert reloaded.secili_mi is False
     assert reloaded.islem_durumu == InvoiceStatus.SUCCESS_DRAFT_CREATED.value
+
+
+def test_repository_updates_processing_state(tmp_path: Path) -> None:
+    repository = InvoiceRecordRepository(tmp_path / "test.sqlite3")
+    record = repository.create(
+        InvoiceRecordCreate(
+            ad="Ali",
+            soyad="Yilmaz",
+            tc_kimlik_no="12345678901",
+            tutar_usd=1500.0,
+            aciklama="Test kaydi",
+        )
+    )
+
+    updated = repository.update_processing_state(
+        record.id,
+        InvoiceStatus.FAILED_PORTAL_TIMEOUT,
+        hata_kodu="PortalTimeoutError",
+        hata_mesaji="Timeout",
+        secili_mi=True,
+    )
+
+    assert updated.islem_durumu == InvoiceStatus.FAILED_PORTAL_TIMEOUT.value
+    assert updated.hata_kodu == "PortalTimeoutError"
+    assert updated.hata_mesaji == "Timeout"
+    assert updated.secili_mi is True

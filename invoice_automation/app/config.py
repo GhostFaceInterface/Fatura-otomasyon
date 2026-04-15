@@ -61,12 +61,15 @@ class Settings:
     timeout_seconds: int = int(os.getenv("TIMEOUT_SECONDS", "30"))
     retry_count: int = int(os.getenv("RETRY_COUNT", "2"))
 
-    mal_hizmet_adi: str = os.getenv("MAL_HIZMET_ADI", "Yurt disi konaklama bedeli")
+    mal_hizmet_adi: str = os.getenv("MAL_HIZMET_ADI", "YURT DIŞI KONAKLAMA BEDELİ")
     miktar: str = os.getenv("MIKTAR", "1")
     kdv_orani: str = os.getenv("KDV_ORANI", "0")
     istisna_kodu: str = os.getenv("ISTISNA_KODU", "302.11")
+    istisna_option_value: str = os.getenv("ISTISNA_OPTION_VALUE", "string:302")
     para_birimi: str = os.getenv("PARA_BIRIMI", "USD")
     kur_tipi: str = os.getenv("KUR_TIPI", "Dolar")
+    default_il: str = os.getenv("DEFAULT_IL", "**")
+    default_ilce: str = os.getenv("DEFAULT_ILCE", "**")
     draft_mode: bool = _bool_env("DRAFT_MODE", True)
 
 

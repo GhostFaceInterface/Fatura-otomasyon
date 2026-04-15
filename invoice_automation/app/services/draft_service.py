@@ -21,7 +21,10 @@ from invoice_automation.app.utils.exceptions import (
     InvalidTCKNError,
     PortalTimeoutError,
     SessionLostError,
+    TurmobServiceError,
+    UnknownPortalError,
 )
+from invoice_automation.app.utils.screenshots import capture_error_screenshot
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +72,12 @@ class SingleDraftService:
         except Exception as exc:
             status = self._status_for_exception(exc)
             error_code = exc.__class__.__name__
+            screenshot_path = getattr(exc, "screenshot_path", None)
+            stage = getattr(exc, "stage", None) or "draft_service_error"
+            if screenshot_path is None:
+                page = self.session_manager.browser_manager.page
+                if page is not None:
+                    screenshot_path = capture_error_screenshot(page, record_id, stage)
             updated_record = self.repository.update_processing_state(
                 record_id,
                 status,
@@ -77,16 +86,20 @@ class SingleDraftService:
                 secili_mi=True,
             )
             logger.exception(
-                "Tek kayit draft basarisiz | record_id=%s status=%s error_code=%s",
+                "Tek kayit draft basarisiz | record_id=%s tc=%s status=%s error_code=%s stage=%s screenshot=%s",
                 record_id,
+                record.tc_kimlik_no,
                 status.value,
                 error_code,
+                stage,
+                screenshot_path,
             )
             return SingleDraftServiceResult(
                 ok=False,
                 record=updated_record,
                 message=str(exc),
                 error_code=error_code,
+                screenshot_path=screenshot_path,
             )
 
     def _ready_page(self):
@@ -100,12 +113,14 @@ class SingleDraftService:
     def _status_for_exception(self, exc: Exception) -> InvoiceStatus:
         if isinstance(exc, InvalidTCKNError):
             return InvoiceStatus.FAILED_INVALID_TCKN
+        if isinstance(exc, TurmobServiceError):
+            return InvoiceStatus.FAILED_TURMOB_SERVICE_ERROR
         if isinstance(exc, EFaturaMukellefiError):
             return InvoiceStatus.SKIPPED_EFATURA_MUKELLEFI
         if isinstance(exc, (PortalTimeoutError, ElementNotFoundError)):
             return InvoiceStatus.FAILED_PORTAL_TIMEOUT
         if isinstance(exc, SessionLostError):
             return InvoiceStatus.ABORTED_SESSION_LOST
-        if isinstance(exc, (DraftCreationError, DraftAutomationError)):
+        if isinstance(exc, (UnknownPortalError, DraftCreationError, DraftAutomationError)):
             return InvoiceStatus.FAILED_UNKNOWN
         return InvoiceStatus.FAILED_UNKNOWN

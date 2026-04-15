@@ -21,6 +21,8 @@ Faz 1, Faz 2, Faz 3 ve Faz 4 kapsaminda uygulama veri import eder, SQLite'a kayd
 - Manuel 2FA sonrasi session hazir kontrolu
 - Tek kayit icin e-Arsiv taslak POC
 - Draft sonucunu SQLite status/hata alanlarina yazma
+- Gercek portal hata dialoglarini status/exception'a map etme
+- Hata aninda screenshot alma
 - Uygulama loglari
 
 ## Klasor Yapisi
@@ -149,7 +151,7 @@ Desteklenen dosya tipleri:
 - Coklu fatura olusturma Faz 6 ve sonrasi icin ayrilmistir.
 - Faz 2 batch hazirligi sadece secili kayitlari hazirlar; portala gitmez.
 - Faz 4 sadece tek kayit POC yapar; coklu batch islemez.
-- Invalid TCKN ve e-Fatura mukellefi detection temeli vardir, portal metinleri netlestikce Faz 5'te sertlestirilecektir.
+- Invalid TCKN, Turmob servis hatasi ve e-Fatura mukellefi dialoglari yakalanir.
 
 ## Guvenlik Notlari
 
@@ -184,16 +186,29 @@ pytest
 16. Tek bir kayit icin `Taslak POC Olustur` butonuna basin.
 17. Portalda e-Arsiv olustur sayfasinin acildigini, USD secildigini, kur getir aksiyonunun tetiklendigini, TCKN ve kalem bilgilerinin doldugunu kontrol edin.
 18. `Taslak Kaydet` butonuna basildigini ve kaydin `SUCCESS_DRAFT_CREATED` veya anlamli hata statusune gectigini kontrol edin.
-19. Eksik kolonlu dosya yukleyip anlasilir hata mesajini kontrol edin.
-20. Hatali TCKN iceren satirin atlandigini ve uygulamanin kapanmadigini kontrol edin.
-21. `data/invoice_automation.sqlite3` dosyasinin olustugunu kontrol edin.
-22. `data/logs/app.log` dosyasina log yazildigini kontrol edin.
+19. Gecersiz TCKN formatinda `geçerli bir VKN/TCKN değeri değildir` dialogunun `FAILED_INVALID_TCKN` yazdigini kontrol edin.
+20. Turmob servis hatasinda `Servis hatası oluştu` dialogunun `FAILED_TURMOB_SERVICE_ERROR` yazdigini kontrol edin.
+21. e-Fatura mukellefi kiside `e-Fatura Mükellefine e-Arşiv Fatura Kesilemez` dialogunun `SKIPPED_EFATURA_MUKELLEFI` yazdigini kontrol edin.
+22. Hata aninda dialogun OK ile kapandigini ve `data/logs/screenshots/` altina screenshot yazildigini kontrol edin.
+23. Eksik kolonlu dosya yukleyip anlasilir hata mesajini kontrol edin.
+24. `data/invoice_automation.sqlite3` dosyasinin olustugunu kontrol edin.
+25. `data/logs/app.log` dosyasina log yazildigini kontrol edin.
+
+## Portal Hata Patternleri
+
+Kodda merkezi tutulan dialog basliklari ve mesaj patternleri:
+
+- Dialog basliklari: `Hata Oluştu`, `Bilgi`
+- Turmob servis hatasi: `Servis hatası oluştu`
+- Gecersiz VKN/TCKN: `geçerli bir VKN/TCKN değeri değildir`
+- e-Fatura mukellefi: `e-Fatura Mükellefine e-Arşiv Fatura Kesilemez`
+- Basari redirect: `/EArchive/Drafts`
 
 ## Gelecek Fazlar
 
 - Faz 2: kayit secimi, durum yonetimi ve batch hazirligi tamamlandi
 - Faz 3: Playwright browser session ve login + 2FA akisi tamamlandi
 - Faz 4: tek kayit icin taslak olusturma POC tamamlandi
-- Faz 5: hata senaryolari ve screenshot/log iyilestirmeleri
+- Faz 5: hata senaryolari ve screenshot/log iyilestirmeleri tamamlandi
 - Faz 6: coklu batch isleme ve sonuc raporu
 - Faz 7: sertlestirme, refactor ve UI iyilestirmeleri

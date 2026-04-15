@@ -63,8 +63,25 @@ Notlar:
 - Basarili kayit `SUCCESS_DRAFT_CREATED`, hata alan kayit anlamli FAILED/SKIPPED/ABORTED statusune gecer.
 - Invalid TCKN ve e-Fatura metinleri portalda netlestikce Faz 5'te sertlestirilecek.
 
+## Faz 5
+
+Tamamlandi:
+
+- Gercek SweetAlert dialog algilama: `Hata Oluştu`, `Bilgi`
+- Turmob servis hatasi mapping: `Servis hatası oluştu` -> `TurmobServiceError` -> `FAILED_TURMOB_SERVICE_ERROR`
+- Gecersiz VKN/TCKN mapping: `geçerli bir VKN/TCKN değeri değildir` -> `InvalidTCKNError` -> `FAILED_INVALID_TCKN`
+- e-Fatura mukellefi mapping: `e-Fatura Mükellefine e-Arşiv Fatura Kesilemez` -> `EFaturaMukellefiError` -> `SKIPPED_EFATURA_MUKELLEFI`
+- Dialog OK ile kapatma
+- Hata aninda screenshot alma
+- Taslak basarisini `/EArchive/Drafts` redirect'i ile dogrulama
+
+Notlar:
+
+- Tek kayit akisi crash etmez; hata sonucunu repository'ye yazar.
+- Screenshotlar `data/logs/screenshots/` altinda record id ve stage ile tutulur.
+- Faz 6 bu kayit bazli dayanikli akisi coklu batch'e tasiyacaktir.
+
 Henuz tamamlanmayan sonraki isler:
 
-- Faz 5: portal hata senaryolari
 - Faz 6: coklu batch
 - Faz 7: sertlestirme ve dokumantasyon iyilestirme

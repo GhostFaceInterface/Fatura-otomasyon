@@ -40,9 +40,24 @@ class SessionNotReadyError(PortalSessionError):
 class DraftAutomationError(InvoiceAutomationError):
     """Base exception for draft invoice automation errors."""
 
+    def __init__(
+        self,
+        message: str,
+        *,
+        stage: str | None = None,
+        screenshot_path: str | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.stage = stage
+        self.screenshot_path = screenshot_path
+
 
 class InvalidTCKNError(DraftAutomationError):
     """Raised when portal customer lookup rejects the TCKN."""
+
+
+class TurmobServiceError(DraftAutomationError):
+    """Raised when Turmob lookup returns a portal service error."""
 
 
 class EFaturaMukellefiError(DraftAutomationError):
@@ -63,3 +78,7 @@ class SessionLostError(DraftAutomationError):
 
 class DraftCreationError(DraftAutomationError):
     """Raised when draft creation fails for an unknown portal reason."""
+
+
+class UnknownPortalError(DraftAutomationError):
+    """Raised when an unclassified portal dialog or error appears."""

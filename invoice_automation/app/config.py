@@ -53,6 +53,9 @@ class Settings:
     )
     log_file_path: Path = Path(os.getenv("LOG_FILE_PATH", str(ROOT_DIR / "data" / "logs" / "app.log")))
     import_dir: Path = Path(os.getenv("IMPORT_DIR", str(ROOT_DIR / "data" / "imports")))
+    screenshot_dir: Path = Path(
+        os.getenv("SCREENSHOT_DIR", str(ROOT_DIR / "data" / "logs" / "screenshots"))
+    )
 
     portal_login_url: str = os.getenv("PORTAL_LOGIN_URL", "https://portal.hizliteknoloji.com.tr/")
     portal_new_invoice_url: str = os.getenv("PORTAL_NEW_INVOICE_URL", "")
@@ -94,3 +97,4 @@ def ensure_runtime_directories() -> None:
     settings.database_path.parent.mkdir(parents=True, exist_ok=True)
     settings.log_file_path.parent.mkdir(parents=True, exist_ok=True)
     settings.import_dir.mkdir(parents=True, exist_ok=True)
+    settings.screenshot_dir.mkdir(parents=True, exist_ok=True)

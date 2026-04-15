@@ -9,6 +9,7 @@
 - Portal login ve manuel 2FA state akisi `PortalSessionManager` uzerinden yonetilir.
 - e-Arsiv sayfa navigasyonu `EArchiveNavigation`, form doldurma `InvoiceFormFiller`, hata hook'lari `PortalErrorDetector`, tek kayit orchestration `DraftCreator` icinde tutulur.
 - Tek kayit draft DB/status akisi `SingleDraftService` ile repository'ye yazilir.
+- Gercek portal dialoglari `PortalErrorDetector` tarafindan okunur, OK ile kapatilir, screenshot alinir ve typed exception'a donusturulur.
 - Durum degerleri `InvoiceStatus` enum'u ile merkezi tutulur.
 - Portal otomasyonu `automation/` katmaninda Playwright ile ayrilir.
 - Kayit bazli hatalar batch'i durdurmayacak; session-level kritik hatalar batch'i guvenli durduracak.

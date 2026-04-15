@@ -16,6 +16,7 @@ class SingleDraftServiceResult:
     record: InvoiceRecord
     message: str
     error_code: str | None = None
+    screenshot_path: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-serializable result."""
@@ -24,5 +25,6 @@ class SingleDraftServiceResult:
             "ok": self.ok,
             "message": self.message,
             "error_code": self.error_code,
+            "screenshot_path": self.screenshot_path,
             "record": self.record.to_dict(),
         }

@@ -1,4 +1,4 @@
-"""Basic portal error detection hooks for draft creation."""
+"""Portal dialog and validation error detection for draft creation."""
 
 from __future__ import annotations
 
@@ -6,18 +6,44 @@ from dataclasses import dataclass
 from typing import Any
 import logging
 
+from invoice_automation.app.constants import (
+    EFATURA_MUKELLEFI_ERROR_PATTERN,
+    INVALID_TCKN_ERROR_PATTERN,
+    PORTAL_DIALOG_OK_BUTTON_NAME,
+    PORTAL_DIALOG_TITLES,
+    TURMOB_SERVICE_ERROR_PATTERN,
+)
 from invoice_automation.app.utils.exceptions import (
     DraftCreationError,
     EFaturaMukellefiError,
     InvalidTCKNError,
+    TurmobServiceError,
+    UnknownPortalError,
 )
+from invoice_automation.app.utils.screenshots import capture_error_screenshot
 
 logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
+class PortalDialogSnapshot:
+    """Detected modal dialog state."""
+
+    title: str
+    message: str
+    stage: str
+    screenshot_path: str | None = None
+
+    @property
+    def combined_text(self) -> str:
+        """Return title and message as one lower-case string."""
+
+        return f"{self.title} {self.message}".lower()
+
+
+@dataclass(frozen=True)
 class PortalErrorSnapshot:
-    """Visible portal errors collected from known message containers."""
+    """Visible non-dialog portal errors collected from known message containers."""
 
     messages: list[str]
 
@@ -29,7 +55,7 @@ class PortalErrorSnapshot:
 
 
 class PortalErrorDetector:
-    """Detect customer and save errors without hard-wiring batch behavior."""
+    """Detect and classify portal errors after critical actions."""
 
     error_selectors = (
         ".validation-summary-errors",
@@ -39,11 +65,66 @@ class PortalErrorDetector:
         "#toast-container",
         ".swal2-html-container",
     )
-    invalid_tckn_keywords = ("tckn", "tc kimlik", "bulunamad", "gecersiz", "geçersiz")
-    efatura_keywords = ("e-fatura", "efatura", "mukellef", "mükellef")
 
-    def collect_errors(self, page: Any) -> PortalErrorSnapshot:
-        """Collect visible text from known error containers."""
+    def raise_if_portal_error(
+        self,
+        page: Any,
+        stage: str,
+        record_id: int | None = None,
+    ) -> None:
+        """Raise a typed exception when a dialog or visible error exists."""
+
+        dialog = self.detect_dialog(page, stage=stage, record_id=record_id)
+        if dialog is not None:
+            self._close_dialog(page, dialog)
+            self._raise_for_dialog(dialog)
+
+        snapshot = self.collect_inline_errors(page)
+        if not snapshot.messages:
+            return
+
+        logger.info("Portal inline error snapshot | stage=%s messages=%s", stage, snapshot.messages)
+        self._raise_for_text("; ".join(snapshot.messages), stage=stage, screenshot_path=None)
+
+    def detect_dialog(
+        self,
+        page: Any,
+        stage: str,
+        record_id: int | None = None,
+        timeout_ms: int = 1_500,
+    ) -> PortalDialogSnapshot | None:
+        """Return the first known visible SweetAlert-style dialog."""
+
+        for title in PORTAL_DIALOG_TITLES:
+            try:
+                dialog = page.get_by_role("dialog", name=title)
+                dialog.wait_for(state="visible", timeout=timeout_ms)
+                message = self._read_dialog_message(dialog)
+                screenshot_path = (
+                    capture_error_screenshot(page, record_id=record_id, stage=stage)
+                    if record_id is not None
+                    else None
+                )
+                snapshot = PortalDialogSnapshot(
+                    title=title,
+                    message=message,
+                    stage=stage,
+                    screenshot_path=screenshot_path,
+                )
+                logger.info(
+                    "Portal dialog algilandi | stage=%s title=%s message=%s screenshot=%s",
+                    stage,
+                    title,
+                    message,
+                    screenshot_path,
+                )
+                return snapshot
+            except Exception:
+                continue
+        return None
+
+    def collect_inline_errors(self, page: Any) -> PortalErrorSnapshot:
+        """Collect visible text from known non-dialog error containers."""
 
         messages: list[str] = []
         for selector in self.error_selectors:
@@ -57,18 +138,51 @@ class PortalErrorDetector:
                 continue
         return PortalErrorSnapshot(messages=messages)
 
-    def raise_if_portal_error(self, page: Any, stage: str) -> None:
-        """Raise a typed exception if the portal exposes a known error."""
+    def _read_dialog_message(self, dialog: Any) -> str:
+        try:
+            text = dialog.inner_text(timeout=1_000)
+        except Exception:
+            try:
+                text = dialog.text_content(timeout=1_000) or ""
+            except Exception:
+                text = ""
+        return " ".join(str(text).split())
 
-        snapshot = self.collect_errors(page)
-        if not snapshot.messages:
-            return
+    def _close_dialog(self, page: Any, dialog: PortalDialogSnapshot) -> None:
+        try:
+            page.get_by_role("button", name=PORTAL_DIALOG_OK_BUTTON_NAME).click(timeout=2_000)
+            logger.info(
+                "Portal dialog OK ile kapatildi | stage=%s title=%s",
+                dialog.stage,
+                dialog.title,
+            )
+        except Exception:
+            logger.exception(
+                "Portal dialog kapatilamadi | stage=%s title=%s",
+                dialog.stage,
+                dialog.title,
+            )
 
-        combined = snapshot.combined_text
-        logger.info("Portal error snapshot | stage=%s messages=%s", stage, snapshot.messages)
+    def _raise_for_dialog(self, dialog: PortalDialogSnapshot) -> None:
+        self._raise_for_text(
+            dialog.message,
+            stage=dialog.stage,
+            screenshot_path=dialog.screenshot_path,
+        )
 
-        if any(keyword in combined for keyword in self.efatura_keywords):
-            raise EFaturaMukellefiError("; ".join(snapshot.messages))
-        if any(keyword in combined for keyword in self.invalid_tckn_keywords):
-            raise InvalidTCKNError("; ".join(snapshot.messages))
-        raise DraftCreationError("; ".join(snapshot.messages))
+    def _raise_for_text(
+        self,
+        text: str,
+        stage: str,
+        screenshot_path: str | None,
+    ) -> None:
+        normalized = text.lower()
+        if TURMOB_SERVICE_ERROR_PATTERN.lower() in normalized:
+            raise TurmobServiceError(text, stage=stage, screenshot_path=screenshot_path)
+        if INVALID_TCKN_ERROR_PATTERN.lower() in normalized:
+            raise InvalidTCKNError(text, stage=stage, screenshot_path=screenshot_path)
+        if EFATURA_MUKELLEFI_ERROR_PATTERN.lower() in normalized:
+            raise EFaturaMukellefiError(text, stage=stage, screenshot_path=screenshot_path)
+        if text:
+            raise UnknownPortalError(text, stage=stage, screenshot_path=screenshot_path)
+        raise DraftCreationError("Portal hatasi algilandi ancak mesaj okunamadi.", stage=stage)

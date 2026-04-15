@@ -6,6 +6,7 @@ __pycache__/
 
 data/*.sqlite3
 data/logs/*.log
+data/logs/screenshots/
 data/imports/*
 data/processed/*
 

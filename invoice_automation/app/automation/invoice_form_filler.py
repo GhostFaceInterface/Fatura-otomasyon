@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 import logging
@@ -60,7 +61,12 @@ class InvoiceFormFiller:
         self.selectors = selectors
         self.timeout_ms = timeout_ms or settings.playwright_timeout_ms
 
-    def fill_form(self, page: Any, form_data: InvoiceFormData) -> None:
+    def fill_form(
+        self,
+        page: Any,
+        form_data: InvoiceFormData,
+        after_turmob_lookup: Callable[[], None] | None = None,
+    ) -> None:
         """Fill currency, customer and line item fields."""
 
         logger.info("Fatura formu dolduruluyor | record_id=%s", form_data.record_id)
@@ -85,6 +91,8 @@ class InvoiceFormFiller:
             "Turmob musteri sorgulama tetiklenemedi.",
         )
         self._wait_after_action(page, 1_000)
+        if after_turmob_lookup is not None:
+            after_turmob_lookup()
 
         self._fill_locator(page, self.selectors.city_selector, form_data.il, "Il alani doldurulamadi.")
         self._press_locator(page, self.selectors.city_selector, "Tab")

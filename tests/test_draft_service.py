@@ -6,7 +6,7 @@ from invoice_automation.app.constants import InvoiceStatus
 from invoice_automation.app.db.models import InvoiceRecordCreate
 from invoice_automation.app.db.repository import InvoiceRecordRepository
 from invoice_automation.app.services.draft_service import SingleDraftService
-from invoice_automation.app.utils.exceptions import InvalidTCKNError
+from invoice_automation.app.utils.exceptions import InvalidTCKNError, TurmobServiceError
 
 
 class FakeBrowserManager:
@@ -41,6 +41,11 @@ class SuccessDraftCreator:
 class InvalidTcknDraftCreator:
     def create_draft(self, page: object, record) -> DraftCreationResult:
         raise InvalidTCKNError("Musteri bulunamadi.")
+
+
+class TurmobServiceDraftCreator:
+    def create_draft(self, page: object, record) -> DraftCreationResult:
+        raise TurmobServiceError("Servis hatası oluştu !", stage="turmob_lookup")
 
 
 def _repository_with_record(tmp_path: Path) -> tuple[InvoiceRecordRepository, int]:
@@ -86,6 +91,22 @@ def test_single_draft_service_maps_invalid_tckn_to_failed_status(tmp_path: Path)
     assert result.ok is False
     assert result.record.islem_durumu == InvoiceStatus.FAILED_INVALID_TCKN.value
     assert result.record.hata_kodu == "InvalidTCKNError"
+    assert result.record.secili_mi is True
+
+
+def test_single_draft_service_maps_turmob_service_error_to_failed_status(tmp_path: Path) -> None:
+    repository, record_id = _repository_with_record(tmp_path)
+    service = SingleDraftService(
+        repository=repository,
+        session_manager=FakeSessionManager(PortalSessionStatus.READY),
+        draft_creator=TurmobServiceDraftCreator(),
+    )
+
+    result = service.create_for_record(record_id)
+
+    assert result.ok is False
+    assert result.record.islem_durumu == InvoiceStatus.FAILED_TURMOB_SERVICE_ERROR.value
+    assert result.record.hata_kodu == "TurmobServiceError"
     assert result.record.secili_mi is True
 
 

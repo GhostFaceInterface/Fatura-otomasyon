@@ -1,60 +1,208 @@
-# e-Arsiv Fatura Otomasyonu
+# e-Arşiv Taslak Fatura Otomasyonu
 
-Lokal bilgisayarda calisan, Excel/CSV verilerinden e-Arsiv taslak fatura olusturma surecini yari otomatik hale getiren Python uygulamasi.
+![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=for-the-badge&logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-local_web_panel-009688?style=for-the-badge&logo=fastapi&logoColor=white)
+![SQLite](https://img.shields.io/badge/SQLite-local_database-003B57?style=for-the-badge&logo=sqlite&logoColor=white)
+![Playwright](https://img.shields.io/badge/Playwright-browser_automation-2EAD33?style=for-the-badge&logo=playwright&logoColor=white)
+![Draft Only](https://img.shields.io/badge/Mode-draft_invoice_only-FFB000?style=for-the-badge)
 
-## 1. Proje Amaci
+Bu proje, Excel veya CSV dosyalarındaki kişi kayıtlarından toplu şekilde e-Arşiv taslak faturası oluşturmak için geliştirilmiş lokal bir otomasyon yazılımıdır. Amaç, manuel veri girişini azaltmak, kayıtları dönem bazında yönetmek, uygun kişileri seçmek, portal üzerinden taslak fatura oluşturma işini otomasyona bırakmak ve her kaydın sonucunu anlaşılır şekilde raporlamaktır.
 
-Bu proje, manuel olarak tekrar edilen e-Arsiv taslak fatura hazirlama adimlarini lokal bir web panel ve Playwright browser otomasyonu ile azaltmak icin gelistirildi. Sistem veriyi import eder, kayitlari fatura donemi altinda saklar, kullanicinin sectigi kisiler icin portala girerek taslak olusturur ve hata alan kayitlari anlamli statuslerle raporlar.
+Uygulama yalnızca yerel bilgisayarda çalışır. Veriler lokal SQLite veritabanında tutulur, kullanıcı oturumu yerel tarayıcı otomasyonu üzerinden yönetilir ve işlem sonunda her kayıt için başarılı, atlandı, hatalı veya kritik nedenle durdu gibi net durumlar üretilir.
 
-## 2. Sistem Ne Yapar / Ne Yapmaz
+> [!IMPORTANT]
+> Bu yazılım GİB'e otomatik gönderim yapmaz. Hedef, toplu kayıtlar için e-Arşiv taslak faturası oluşturmaktır. Son kontrol ve resmi gönderim sorumluluğu kullanıcıdadır.
 
-Yapar:
+---
 
-- Excel/CSV import eder.
-- Excel sheet secimi ve kolon mapping sunar.
-- Her importu ayri fatura donemi olarak saklar.
-- Kayitlari aktif fatura donemine gore listeler.
-- Kayit secimi ve tumunu sec davranisini destekler.
-- Headful Playwright browser acip login formunu doldurur.
-- 2FA varsa kullaniciyi manuel kod girisi icin bekletir.
-- 2FA yoksa `/Home/Index` veya e-Arsiv menu sinyali ile session hazir kabul eder.
-- Tek kayit ve secili coklu kayit icin taslak e-Arsiv fatura olusturma akisini calistirir.
-- Invalid TCKN, Turmob servis hatasi, e-Fatura mukellefi ve ad/soyad uyusmazligi gibi durumlari statuslere map eder.
-- Hata aninda log ve screenshot uretir.
+## İçindekiler
 
-Yapmaz:
+- [Programın Amacı](#programın-amacı)
+- [Büyük Resim](#büyük-resim)
+- [Öne Çıkan Yetenekler](#öne-çıkan-yetenekler)
+- [Neyi Otomatikleştirir, Neyi Yapmaz](#neyi-otomatikleştirir-neyi-yapmaz)
+- [Kurulum](#kurulum)
+- [Ortam Ayarları](#ortam-ayarları)
+- [Çalıştırma](#çalıştırma)
+- [Veri Formatı](#veri-formatı)
+- [Kullanım Akışı](#kullanım-akışı)
+- [Kayıt Durumları](#kayıt-durumları)
+- [Raporlama ve Loglar](#raporlama-ve-loglar)
+- [Teknik Mimari](#teknik-mimari)
+- [Güvenlik ve Operasyon Notları](#güvenlik-ve-operasyon-notları)
+- [Test](#test)
+- [Sınırlar](#sınırlar)
 
-- GIB'e otomatik gonderim yapmaz.
-- Muhasebe sistemi veya uzak sunucu deployment saglamaz.
-- Cok kullanicili rol/yetki sistemi kurmaz.
-- Hata alan kayitlari otomatik yeniden deneme workflow'una sokmaz.
+---
 
-## 3. Kurulum
+## Programın Amacı
 
-Python 3.11+ kullanin.
+Şirketler, tur organizasyonları veya benzer toplu müşteri operasyonları e-Arşiv taslak faturalarını çoğu zaman tekrar eden bilgilerle hazırlar. Her kişi için ad, soyad, TCKN, tutar, döviz, istisna ve fatura kalemi gibi bilgilerin tekrar tekrar girilmesi zaman kaybı yaratır ve insan hatasına açıktır.
 
-```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-playwright install chromium
+Bu uygulama bu süreci tek bir lokal panel altında toplar:
+
+- Dosyadaki kayıtları içeri alır.
+- Kayıtları fatura dönemi mantığıyla gruplar.
+- Kullanıcıya kayıtları kontrol etme, arama, sıralama ve seçme imkanı verir.
+- Seçilen kayıtlar için e-Arşiv taslak fatura oluşturma sürecini otomatikleştirir.
+- Hatalı veya atlanan kişileri batch'i gereksiz yere durdurmadan raporlar.
+- Kritik oturum veya portal problemi olursa işlemi güvenli biçimde durdurur.
+
+Kısaca: bu proje, toplu e-Arşiv taslak fatura hazırlama işini daha hızlı, kontrollü ve raporlanabilir hale getiren bir masaüstü/lokal web otomasyonudur.
+
+---
+
+## Büyük Resim
+
+```mermaid
+flowchart LR
+    A["Excel / CSV veri dosyası"] --> B["Lokal web panel"]
+    B --> C["Fatura dönemi ve kayıt kontrolü"]
+    C --> D["Seçili kayıtlar"]
+    D --> E["Tarayıcı otomasyonu"]
+    E --> F["e-Arşiv taslak faturaları"]
+    E --> G["Hata, atlama ve başarı raporu"]
+
+    classDef source fill:#e0f2fe,stroke:#0284c7,color:#0f172a
+    classDef panel fill:#ecfdf5,stroke:#16a34a,color:#0f172a
+    classDef action fill:#fef3c7,stroke:#d97706,color:#0f172a
+    classDef result fill:#fce7f3,stroke:#db2777,color:#0f172a
+
+    class A source
+    class B,C panel
+    class D,E action
+    class F,G result
 ```
 
-## 4. .env Ayarlari
+Uygulama kullanıcıdan gelen Excel/CSV dosyasını okur, kayıtları lokal veritabanında saklar, kullanıcı tarafından seçilen kayıtları sırayla işler ve sonuçları tekrar lokal panelde gösterir.
+
+---
+
+## Öne Çıkan Yetenekler
+
+| Alan | Yetenek |
+| --- | --- |
+| Veri alma | `.xlsx`, `.xls` ve `.csv` dosyalarını içeri aktarır. |
+| Excel desteği | Çok sheet'li Excel dosyalarında sheet seçimi yapabilir. |
+| Kolon eşleştirme | Ad, soyad, TCKN ve tutar alanlarını kullanıcı kontrollü eşleştirir. |
+| Fatura dönemi | Her importu ayrı fatura dönemi olarak saklar. |
+| Kayıt kontrolü | Aktif fatura dönemindeki kayıtları listeler, arar, sıralar ve filtreler. |
+| Canlı arama | Ad, soyad veya TCKN yazıldıkça sonuçları beklemeden günceller. |
+| Sıralama | Ad, soyad, TC kimlik no, tutar veya kayıt sırasına göre artan/azalan sıralar. |
+| Seçim yönetimi | Sadece işlenebilir kayıtları seçime açar; tamamlanmış kayıtları korur. |
+| Oturum yönetimi | Portal oturumunu headful tarayıcıyla yönetir, 2FA sürecini kullanıcı kontrolünde bırakır. |
+| Taslak oluşturma | Seçili kayıtlar için e-Arşiv taslak fatura oluşturma akışını otomatikleştirir. |
+| Hata dayanıklılığı | Kayıt bazlı hatalarda batch'i devam ettirir. |
+| Kritik durdurma | Oturum kaybı gibi kritik durumlarda işlemi güvenli durdurur. |
+| Raporlama | Başarılı, hatalı, atlanan ve durdurulan kayıtları özet ve detay olarak raporlar. |
+| Screenshot | Hata anında ekran görüntüsü alarak inceleme kolaylığı sağlar. |
+| Uyku önleme | Toplu işlem sırasında bilgisayarın uyumasını engellemeye çalışır. |
+
+---
+
+## Neyi Otomatikleştirir, Neyi Yapmaz
+
+### Otomatikleştirdiği işler
+
+- Toplu kişi verisinin uygulamaya alınması.
+- Fatura dönemi bazlı kayıt yönetimi.
+- Kayıt arama, filtreleme, sıralama ve seçim.
+- Portal oturumunun otomasyon için hazırlanması.
+- Seçili kayıtlar için taslak e-Arşiv fatura oluşturma.
+- Kayıt bazlı hata sınıflandırma.
+- Hata screenshot ve log kaydı.
+- Batch sonunda sonuç raporu üretme.
+
+### Bilinçli olarak yapmadığı işler
+
+- GİB'e otomatik gönderim yapmaz.
+- 2FA kodunu otomatik çözmez veya saklamaz.
+- Portal şifresini uzak bir sunucuya göndermez.
+- Çok kullanıcılı yetki/rol sistemi sunmaz.
+- Uzak sunucu deployment veya cloud çalışma modu sağlamaz.
+- Tamamlanmış veya hatalı kayıtları kendiliğinden tekrar deneme kuyruğuna almaz.
+
+---
+
+## Kurulum
+
+### Gereksinimler
+
+- Python 3.11 veya üzeri
+- Chromium destekli Playwright kurulumu
+- Lokal çalıştırma için terminal erişimi
+- Portal erişim bilgileri
+
+### macOS / Linux
+
+```bash
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+python -m playwright install chromium
+```
+
+### Windows PowerShell
+
+```powershell
+py -3 -m venv venv
+.\venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+python -m playwright install chromium
+```
+
+> [!NOTE]
+> Projede halihazırda `venv/` klasörü kullanılıyorsa aynı isimle devam edebilirsiniz. Farklı bir sanal ortam adı kullanmanız teknik olarak mümkündür; önemli olan komutları aktif sanal ortam içinde çalıştırmaktır.
+
+---
+
+## Ortam Ayarları
+
+Örnek ortam dosyasını kopyalayın:
 
 ```bash
 cp .env.example .env
 ```
 
-Temel alanlar:
+Temel ayarlar:
 
-```text
+```env
+APP_HOST=127.0.0.1
+APP_PORT=8000
+APP_DEBUG=false
+
+DATABASE_PATH=data/invoice_automation.sqlite3
+LOG_FILE_PATH=data/logs/app.log
+IMPORT_DIR=data/imports
+SCREENSHOT_DIR=data/logs/screenshots
+
 PORTAL_LOGIN_URL=https://portal.hizliteknoloji.com.tr/
 PORTAL_2FA_URL=https://portal.hizliteknoloji.com.tr/User/VerificationUser?verificationType=Mail
 PORTAL_USERNAME=
 PORTAL_PASSWORD=
+
 PLAYWRIGHT_HEADLESS=false
 PLAYWRIGHT_TIMEOUT_MS=30000
+```
+
+Fatura varsayılanları:
+
+```env
+MAL_HIZMET_ADI=YURT DIŞI KONAKLAMA BEDELİ
+MIKTAR=1
+PARA_BIRIMI=USD
+KUR_TIPI=Dolar
+KDV_ORANI=0
+ISTISNA_KODU=302.11
+ISTISNA_TARGET_TEXT=302-11/1-a Hizmet ihracatı
+DEFAULT_IL=**
+DEFAULT_ILCE=**
+DRAFT_MODE=true
+```
+
+Dayanıklılık ve bekleme ayarları:
+
+```env
 NAVIGATION_RETRY_COUNT=2
 FIELD_WAIT_TIMEOUT_MS=30000
 REDIRECT_WAIT_TIMEOUT_MS=30000
@@ -62,157 +210,308 @@ TURMOB_LOOKUP_RETRY_COUNT=2
 RETRY_BACKOFF_BASE_MS=500
 TAX_SCHEME_PREFILL_WAIT_MS=2000
 DRAFT_SAVE_WAIT_MS=2000
+```
+
+Toplu işlem sırasında uyku önleme:
+
+```env
 SLEEP_PREVENTION_ENABLED=true
 SLEEP_PREVENTION_PLATFORM=auto
 SLEEP_PREVENTION_KEEP_DISPLAY_AWAKE=true
-MAL_HIZMET_ADI=YURT DIŞI KONAKLAMA BEDELİ
-PARA_BIRIMI=USD
-KDV_ORANI=0
-ISTISNA_TARGET_TEXT=302-11/1-a Hizmet ihracatı
-ISTISNA_OPTION_VALUE=
-DEFAULT_IL=**
-DEFAULT_ILCE=**
 ```
 
-2FA kodu `.env` icinde tutulmaz. Kod acik browser uzerinden kullanici tarafindan girilir.
+`SLEEP_PREVENTION_PLATFORM=auto` ayarı işletim sistemini otomatik algılar. macOS üzerinde `caffeinate`, Windows üzerinde native execution state, Linux üzerinde uygun olduğunda `systemd-inhibit` kullanılır.
 
-Sleep prevention ayarlari sadece batch/taslak olusturma sirasinda kullanilir. Import, kayit listeleme veya session ekraninda bilgisayarin uyku davranisi degistirilmez. `SLEEP_PREVENTION_PLATFORM=auto` macOS, Windows ve Linux'u otomatik algilar; gerekirse `macos`, `windows` veya `linux` olarak elle yazilabilir.
+> [!WARNING]
+> `.env` dosyası portal kullanıcı adı ve şifre bilgilerini içerebilir. Bu dosyayı Git'e commit etmeyin ve başka kişilerle paylaşmayın.
 
-## 5. Uygulamayi Calistirma
+---
+
+## Çalıştırma
 
 ```bash
 python run.py
 ```
 
-Panel:
+Uygulama varsayılan olarak şu adreste açılır:
 
 ```text
 http://127.0.0.1:8000
 ```
 
-## 6. Excel Import Akisi
+Runtime dosyaları proje içindeki `data/` klasörü altında tutulur:
 
-1. `/` ekraninda Excel veya CSV dosyasini yukleyin.
-2. Excel dosyasinda kullanilacak sheet'i secin.
-3. Kolon mapping ekraninda zorunlu alanlari eslestirin.
-4. Fatura donemi / batch adi verin.
-5. Importu onaylayin.
+```text
+data/
+  imports/                 # Yüklenen dosyalar
+  logs/app.log             # Uygulama logları
+  logs/screenshots/        # Hata ekran görüntüleri
+  invoice_automation.sqlite3
+```
 
-## 7. Sheet Secimi
+---
 
-Excel dosyasi birden fazla sheet iceriyorsa sistem sheet listesini okur. Kullanici import edilecek sheet'i secer ve kolon listesi secilen sheet'e gore yenilenir.
+## Veri Formatı
 
-## 8. Kolon Mapping
+Uygulama Excel veya CSV içinden aşağıdaki alanları bekler.
 
-Zorunlu alanlar:
+| Alan | Zorunlu | Açıklama |
+| --- | --- | --- |
+| `ad` | Evet | Kişinin adı. |
+| `soyad` | Evet | Kişinin soyadı. |
+| `tc_kimlik_no` | Evet | TC kimlik numarası veya portalın beklediği kimlik bilgisi. |
+| `tutar_usd` | Evet | USD cinsinden fatura tutarı. |
+| `aciklama` | Hayır | Kayıt açıklaması veya operasyon notu. |
 
-- `ad`
-- `soyad`
-- `tc_kimlik_no`
-- `tutar_usd`
+Tutar alanı farklı yazımları normalize edecek şekilde ele alınır:
 
-Opsiyonel alan:
+| Örnek değer | Beklenen anlam |
+| --- | --- |
+| `$1.450` | 1450 USD |
+| `1.450` | 1450 USD |
+| `$1,450` | 1450 USD |
+| `$1450.75` | 1450.75 USD |
+| `850` | 850 USD |
 
-- `aciklama`
+Boş, metinsel veya parse edilemeyen tutarlar import sırasında satır bazlı hata olarak raporlanır.
 
-Otomatik alias mapping fallback olarak korunur, ancak operasyonel kullanimda kullanici kontrollu mapping tercih edilir.
+---
 
-## 9. Fatura Donemi / Batch Mantigi
+## Kullanım Akışı
 
-Her import `import_batches` tablosunda ayri bir fatura donemi olusturur. `invoice_records.batch_id` ile kayitlar ilgili doneme baglanir.
+Bu uygulama dört ana operasyon adımı etrafında çalışır:
 
-Records ve batch ekranlari aktif fatura donemi baglaminda calisir. Eski donemde secili kalmis kayitlar yeni donem batch islemini etkilemez.
+```mermaid
+flowchart TB
+    A["1. Veri yükle"] --> B["2. Kayıtları kontrol et ve seç"]
+    B --> C["3. Portal oturumunu hazırla"]
+    C --> D["4. Toplu taslak oluştur"]
+    D --> E["Sonuç raporunu incele"]
 
-## 10. Session Baslatma
+    classDef blue fill:#dbeafe,stroke:#2563eb,color:#111827
+    classDef green fill:#dcfce7,stroke:#16a34a,color:#111827
+    classDef amber fill:#fef3c7,stroke:#d97706,color:#111827
+    classDef pink fill:#fce7f3,stroke:#db2777,color:#111827
+    classDef gray fill:#f1f5f9,stroke:#64748b,color:#111827
 
-`/session` ekraninda:
+    class A blue
+    class B green
+    class C amber
+    class D pink
+    class E gray
+```
 
-1. `Tarayiciyi Ac / Login Baslat` butonuna basin.
-2. Sistem portali acar, kullanici adi ve sifreyi `.env` uzerinden doldurur.
-3. Login sonrasi durum panelde guncellenir.
+### 1. Veri yükleme
 
-## 11. 2FA'li / 2FA'siz Login Davranisi
+Excel veya CSV dosyası içeri alınır. Excel dosyasında birden fazla sheet varsa kullanılacak sheet seçilir. Uygulama her importu ayrı bir fatura dönemi olarak saklar.
 
-Login sonrasi uc sinyal izlenir:
+### 2. Kayıt kontrolü ve seçim
 
-- 2FA sayfasi: `/User/VerificationUser`
-- Basarili dashboard: `/Home/Index`
-- e-Arsiv menu linki
+Aktif fatura dönemindeki kişiler listelenir. Kullanıcı kayıtları hızlıca arayabilir, duruma göre filtreleyebilir, ad/soyad/TCKN/tutar alanlarına göre sıralayabilir ve taslak oluşturulacak kayıtları seçebilir.
 
-2FA sayfasi gelirse kullanici kodu manuel girer ve panelde session kontrolu calistirilir. `/Home/Index` veya e-Arsiv menu gorunurse session `READY` kabul edilir.
+### 3. Oturum hazırlığı
 
-## 12. Kayit Secme
+Portal oturumu yerel tarayıcı otomasyonu ile hazırlanır. 2FA gerekiyorsa kod kullanıcı tarafından manuel girilir. Oturum hazır olduğunda toplu işlem başlatılabilir.
 
-`/records?batch_id=...` ekraninda aktif fatura donemine ait kayitlar listelenir. Sadece `PENDING` ve `SELECTED` kayitlar secilebilir. Header'daki `Tumunu Sec` checkbox'i yalnizca gorunur ve uygun checkboxlari etkiler.
+### 4. Toplu taslak oluşturma
 
-## 13. Toplu Taslak Olusturma
+Seçili ve işlenebilir kayıtlar sırayla ele alınır. Her kayıt için taslak fatura oluşturma denemesi yapılır. Başarılı kayıtlar tamamlanmış olarak işaretlenir; kayıt bazlı hatalarda işlem mümkün olduğunca sonraki kişiye geçer.
 
-`/batch?batch_id=...` ekraninda:
+### 5. Sonuç raporu
 
-1. Aktif fatura donemini kontrol edin.
-2. Session durumunun `READY` oldugunu dogrulayin.
-3. Secili uygun kayit sayisini kontrol edin.
-4. `Secilileri Taslak Olustur` butonuna basin.
+Batch sonunda başarılı, hatalı, atlanan ve durdurulan kayıtlar özetlenir. Hata mesajları, durum kodları ve varsa screenshot path bilgisi raporda görünür.
 
-Batch siralidir. Kayit bazli hatalarda sonraki kayda gecilir. Session veya navigation kritik hatasinda batch guvenli sekilde durur.
+---
 
-Batch calisirken uygulama bilgisayarin uyumasini engellemeye calisir. macOS'ta `caffeinate`, Windows'ta native execution state, Linux'ta `systemd-inhibit` kullanilir. Batch tamamlaninca veya hata nedeniyle durunca bu engel otomatik kapatilir.
+## Kayıt Durumları
 
-## 14. Hata Statusleri
+| Renk | Durum | Anlam |
+| --- | --- | --- |
+| ![pending](https://img.shields.io/badge/PENDING-waiting-64748B) | `PENDING` | Kayıt import edildi, henüz işlenmedi. |
+| ![selected](https://img.shields.io/badge/SELECTED-selected-F59E0B) | `SELECTED` | Kayıt kullanıcı tarafından batch için seçildi. |
+| ![progress](https://img.shields.io/badge/IN_PROGRESS-running-2563EB) | `IN_PROGRESS` | Kayıt işleniyor. |
+| ![success](https://img.shields.io/badge/SUCCESS_DRAFT_CREATED-success-16A34A) | `SUCCESS_DRAFT_CREATED` | Taslak fatura başarıyla oluşturuldu. |
+| ![invalid](https://img.shields.io/badge/FAILED_INVALID_TCKN-invalid-DC2626) | `FAILED_INVALID_TCKN` | Kimlik numarası portal veya format doğrulamasından geçmedi. |
+| ![name](https://img.shields.io/badge/FAILED_NAME_MISMATCH-mismatch-B91C1C) | `FAILED_NAME_MISMATCH` | Portal/Turmob ad-soyad bilgisi lokal kayıtla eşleşmedi. |
+| ![turmob](https://img.shields.io/badge/FAILED_TURMOB_SERVICE_ERROR-service_error-9333EA) | `FAILED_TURMOB_SERVICE_ERROR` | Turmob servisinden hata alındı. |
+| ![skip](https://img.shields.io/badge/SKIPPED_EFATURA_MUKELLEFI-skipped-0891B2) | `SKIPPED_EFATURA_MUKELLEFI` | Kişi e-Fatura mükellefi olduğu için e-Arşiv taslak süreci atlandı. |
+| ![timeout](https://img.shields.io/badge/FAILED_PORTAL_TIMEOUT-timeout-EA580C) | `FAILED_PORTAL_TIMEOUT` | Portal beklenen sürede yanıt vermedi. |
+| ![unknown](https://img.shields.io/badge/FAILED_UNKNOWN-unknown-7F1D1D) | `FAILED_UNKNOWN` | Sınıflandırılamayan kayıt bazlı hata oluştu. |
+| ![abort](https://img.shields.io/badge/ABORTED_SESSION_LOST-kritik_durdu-111827) | `ABORTED_SESSION_LOST` | Oturum veya browser kritik nedenle kaybedildi, batch güvenli durduruldu. |
 
-- `PENDING`: import edildi, islem bekliyor.
-- `SELECTED`: kullanici tarafindan batch icin secildi.
-- `IN_PROGRESS`: kayit isleniyor.
-- `SUCCESS_DRAFT_CREATED`: taslak basariyla olustu.
-- `FAILED_INVALID_TCKN`: VKN/TCKN formati veya portal validasyonu gecersiz.
-- `FAILED_NAME_MISMATCH`: Turmob ad/soyad ile lokal kayit eslesmedi.
-- `FAILED_TURMOB_SERVICE_ERROR`: Turmob servis hatasi alindi.
-- `SKIPPED_EFATURA_MUKELLEFI`: kisi e-Fatura mukellefi oldugu icin e-Arsiv kesilemedi.
-- `FAILED_PORTAL_TIMEOUT`: portal elementi, redirect veya navigation timeout oldu.
-- `FAILED_UNKNOWN`: siniflandirilmamis hata.
-- `ABORTED_SESSION_LOST`: session/browser kritik nedenle kaybedildi.
+---
 
-## 15. Screenshot ve Loglar
+## Raporlama ve Loglar
 
-- Uygulama logu: `data/logs/app.log`
-- Hata screenshotlari: `data/logs/screenshots/`
-- Veritabani: `data/invoice_automation.sqlite3`
+Uygulama her batch sonunda hem özet hem detay üretir:
 
-Batch raporunda screenshot path gorunuyorsa ilgili kaydin hata anindaki ekran goruntusu incelenmelidir.
+- Toplam seçili kayıt sayısı.
+- İşlenen kayıt sayısı.
+- Başarılı taslak sayısı.
+- Atlanan kayıt sayısı.
+- Hatalı kayıt sayısı.
+- Kritik nedenle durdurulan kayıt sayısı.
+- Kayıt bazlı durum, hata kodu, hata mesajı ve screenshot path bilgisi.
 
-## 16. Bilinen Sinirlamalar
+Dosya konumları:
 
-- Portal selectorlari gercek portala baglidir; portal UI degisirse guncelleme gerekir.
-- TCKN dogrulamasi import sirasinda format seviyesindedir.
-- Batch sirali calisir; websocket, queue veya paralel isleme yoktur.
-- Basarili/hata/skip kayitlar otomatik yeniden denenmez.
-- Bu uygulama sadece lokal kullanim icin tasarlanmistir.
+| Dosya / klasör | Amaç |
+| --- | --- |
+| `data/invoice_automation.sqlite3` | Lokal SQLite veritabanı. |
+| `data/imports/` | Uygulamaya yüklenen import dosyaları. |
+| `data/logs/app.log` | Uygulama ve otomasyon logları. |
+| `data/logs/screenshots/` | Hata anında alınan ekran görüntüleri. |
 
-## 17. Guvenlik Notlari
+> [!TIP]
+> Bir kayıt hatalı görünüyorsa önce batch raporundaki durum koduna, ardından hata mesajına ve varsa screenshot dosyasına bakın. Bu üç bilgi genellikle hatanın veri kaynaklı mı, portal kaynaklı mı, yoksa oturum kaynaklı mı olduğunu hızlıca ayırır.
 
-- `.env` repoya commit edilmemelidir.
-- Portal sifresi sadece lokal `.env` dosyasinda tutulmalidir.
-- Uygulama headful browser kullanir; 2FA kodu otomatik cozulmez.
-- Canli kullanim oncesi kucuk test batch'i ile dogrulama yapin.
+---
 
-## 18. Canli Kullanim Oncesi Checklist
+## Teknik Mimari
 
-1. `.env` credential alanlari dogru mu?
-2. Excel dosyasi dogru mu?
-3. Sheet ve kolon mapping dogru mu?
-4. Fatura donemi adi dogru mu?
-5. Records ekraninda sadece aktif donem kayitlari mi gorunuyor?
-6. Secili kayit sayisi beklenen sayi mi?
-7. Session durumu `READY` mi?
-8. `.env` icinde sleep prevention ayarlari dogru mu?
-9. Ilk deneme kucuk kayit grubu ile yapildi mi?
-10. Batch sonrasi success/fail/skip dagilimi kontrol edildi mi?
-11. Hata screenshot ve loglari incelendi mi?
+```mermaid
+flowchart LR
+    subgraph UI["Lokal Web Panel"]
+        T["Jinja2 Templates"]
+        API["FastAPI UI + JSON Routes"]
+    end
+
+    subgraph Core["Uygulama Katmanı"]
+        Import["ImportService"]
+        Selection["SelectionService"]
+        Batch["BatchService / BatchRunner"]
+        Draft["SingleDraftService"]
+    end
+
+    subgraph Data["Lokal Veri"]
+        Repo["Repository"]
+        DB[("SQLite")]
+        Logs["Loglar ve Screenshotlar"]
+    end
+
+    subgraph Portal["Portal Otomasyonu"]
+        Browser["BrowserManager"]
+        Session["PortalSessionManager"]
+        Automation["Playwright Akışı"]
+    end
+
+    T --> API
+    API --> Import
+    API --> Selection
+    API --> Batch
+    Batch --> Draft
+    Import --> Repo
+    Selection --> Repo
+    Draft --> Repo
+    Repo --> DB
+    Draft --> Logs
+    Draft --> Automation
+    Automation --> Browser
+    Automation --> Session
+
+    classDef ui fill:#dbeafe,stroke:#2563eb,color:#111827
+    classDef core fill:#dcfce7,stroke:#16a34a,color:#111827
+    classDef data fill:#fef3c7,stroke:#d97706,color:#111827
+    classDef portal fill:#fce7f3,stroke:#db2777,color:#111827
+
+    class T,API ui
+    class Import,Selection,Batch,Draft core
+    class Repo,DB,Logs data
+    class Browser,Session,Automation portal
+```
+
+Ana teknolojiler:
+
+| Teknoloji | Rol |
+| --- | --- |
+| Python | Uygulama dili. |
+| FastAPI | Lokal web panel ve JSON API. |
+| Jinja2 | Server-rendered HTML ekranlar. |
+| Bootstrap 5 | Panel görünümü ve form/tablo bileşenleri. |
+| SQLite | Lokal kalıcı veri katmanı. |
+| Pandas / openpyxl | Excel ve CSV okuma. |
+| Playwright | Headful browser otomasyonu. |
+| pytest | Test paketi. |
+
+Mimari yaklaşım:
+
+- UI route'ları, import/selection/batch/draft servislerinden ayrıdır.
+- SQLite erişimi repository katmanında toplanır.
+- Her import bir fatura dönemidir; kayıtlar `batch_id` ile ayrılır.
+- Portal otomasyonu `automation/` katmanında izole tutulur.
+- Kayıt bazlı hatalar batch'i durdurmaz; kritik oturum hataları batch'i güvenli durdurur.
+- Testler servis, repository ve otomasyon yardımcı katmanlarını kapsar.
+
+---
+
+## Güvenlik ve Operasyon Notları
+
+- Uygulama lokal çalışmak üzere tasarlanmıştır.
+- `.env` dosyası gizli kabul edilmelidir.
+- 2FA kodu uygulamada saklanmaz.
+- Portal şifresi yalnızca lokal `.env` dosyasından okunur.
+- Canlı kullanım öncesi küçük bir kayıt grubu ile pilot deneme yapılmalıdır.
+- Portal arayüzü değişirse otomasyon selector ve bekleme davranışları yeniden doğrulanmalıdır.
+- Batch sırasında bilgisayarın uyuması engellenmeye çalışılır, ancak işletim sistemi izinleri ve güç ayarları yine de kontrol edilmelidir.
+
+Önerilen canlı kullanım hazırlığı:
+
+| Kontrol | Beklenen sonuç |
+| --- | --- |
+| `.env` portal bilgileri | Kullanıcı adı ve şifre doğru. |
+| Import dosyası | Doğru sheet ve doğru kolonlar seçilmiş. |
+| Kayıt listesi | Aktif fatura döneminde beklenen kişiler görünüyor. |
+| Seçim | Sadece işlenecek kişiler seçilmiş. |
+| Oturum | Portal oturumu hazır. |
+| Pilot batch | Küçük kayıt grubuyla doğrulama yapılmış. |
+| Rapor | Başarı/hata/atlama dağılımı kontrol edilmiş. |
+
+---
 
 ## Test
+
+Tüm testleri çalıştırmak için:
 
 ```bash
 pytest
 ```
 
-Detayli operasyon adimlari icin `docs/USAGE_GUIDE.md`, kontrol listeleri icin `docs/OPERATIONS_CHECKLIST.md` dosyasina bakin.
+Sanal ortamı doğrudan kullanmak isterseniz:
+
+```bash
+venv/bin/python -m pytest
+```
+
+Template parse kontrolü için:
+
+```bash
+venv/bin/python -c "from pathlib import Path; from jinja2 import Environment, FileSystemLoader; d = Path('invoice_automation/app/templates'); env = Environment(loader=FileSystemLoader(d)); [env.get_template(p.name) for p in d.glob('*.html')]; print('templates ok')"
+```
+
+---
+
+## Sınırlar
+
+Bu proje pratik ve kontrollü bir v1 otomasyonudur. Aşağıdaki konular kapsam dışıdır:
+
+- Otomatik resmi gönderim.
+- Paralel batch çalıştırma.
+- Websocket ile gerçek zamanlı progress stream.
+- Çok kullanıcılı yetkilendirme.
+- Cloud deployment.
+- Muhasebe/ERP entegrasyonu.
+- Portal değişikliklerine karşı tamamen bağımsız çalışma.
+
+---
+
+## Yardımcı Dokümanlar
+
+- Kullanıcı odaklı operasyon rehberi: [`docs/USAGE_GUIDE.md`](docs/USAGE_GUIDE.md)
+- Canlı kullanım kontrol listesi: [`docs/OPERATIONS_CHECKLIST.md`](docs/OPERATIONS_CHECKLIST.md)
+- Proje hafıza kayıtları: [`memory-bank/`](memory-bank/)
+
+---
+
+## Kısa Özet
+
+e-Arşiv Taslak Fatura Otomasyonu, Excel/CSV kayıtlarını lokal bir panelde yönetip seçili kişiler için toplu taslak fatura oluşturmayı kolaylaştırır. Kayıtları dönem bazında ayırır, canlı arama ve sıralama sunar, portal otomasyonunu kullanıcı kontrollü oturumla çalıştırır, hataları kayıt bazında raporlar ve resmi gönderim aşamasını bilinçli olarak kullanıcı kontrolünde bırakır.

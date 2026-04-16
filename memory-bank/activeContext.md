@@ -90,3 +90,10 @@ Kayit listesi UX guncellemesi:
 - Secimi kaydet aksiyonu mevcut filtre ve siralama query parametrelerini koruyarak kayit ekranina doner.
 - Canli arama `/api/records` ile tabloyu yerinde gunceller; secili kayit ID'leri filtre/siralama degisikliklerinde client state olarak korunur.
 - Ad/soyad aramasi Python `casefold()` ile yapilir, boylece Turkce buyuk/kucuk harf eslesmesi SQLite `LIKE` davranisina bagli kalmaz.
+
+README final dokumantasyon guncellemesi:
+
+- `README.md` bastan sona final urun dokumani olarak yeniden yazildi.
+- Odak program amaci, toplu e-Arsiv taslak fatura otomasyonu, kurulum, yetenekler, veri formati, operasyon akisi, durumlar, raporlama, mimari ve guvenlik notlari olarak belirlendi.
+- Portal icindeki tek tek buton adimlari anlatilmadi; yuksek seviye toplu taslak fatura otomasyonu dili kullanildi.
+- README icine renkli Shields rozetleri ve renkli Mermaid akis/mimari diagramlari eklendi.

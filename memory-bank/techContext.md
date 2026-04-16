@@ -23,6 +23,9 @@ Faz 6 ve son faz icin ek runtime ayarlari:
 - `RETRY_BACKOFF_BASE_MS`: Kisa artan bekleme icin baz sure. Varsayilan `500`.
 - `TAX_SCHEME_PREFILL_WAIT_MS`: TCKN girildikten sonra vergi dairesi alaninin otomatik dolmasini bekleme suresi. Varsayilan `2000`.
 - `DRAFT_SAVE_WAIT_MS`: Taslak Kaydet tiklandiktan sonra portal yuklenmesini bekleme suresi. Varsayilan `2000`.
+- `SLEEP_PREVENTION_ENABLED`: Batch run sirasinda bilgisayarin uyumasini engeller. Varsayilan `true`.
+- `SLEEP_PREVENTION_PLATFORM`: `auto`, `macos`, `windows`, `linux` veya `disabled`. Varsayilan `auto`.
+- `SLEEP_PREVENTION_KEEP_DISPLAY_AWAKE`: Sleep prevention aktifken ekrani da uyanik tutmaya calisir. Varsayilan `true`.
 
 Faz 7 oncesi kritik tamamlamalar:
 

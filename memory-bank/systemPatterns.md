@@ -18,6 +18,8 @@
 - Tek kayit draft DB/status akisi `SingleDraftService` ile repository'ye yazilir.
 - Gercek portal dialoglari `PortalErrorDetector` tarafindan okunur, OK ile kapatilir, screenshot alinir ve typed exception'a donusturulur.
 - Coklu isleme `BatchRunner` tarafindan sirali olarak yapilir; runner tek kayit akisini `SingleDraftService` uzerinden cagirir.
+- `BatchRunner.run()` sadece batch isleme sirasinda `SleepPreventionGuard` context manager'i acarak bilgisayarin uyumasini engeller ve cikista otomatik kapatir.
+- Sleep prevention macOS icin `caffeinate`, Windows icin `SetThreadExecutionState`, Linux icin `systemd-inhibit` kullanir.
 - Batch raporu `BatchReportService` ile status dagilimi ve kayit detaylarina donusturulur.
 - UI batch run, session READY degilken kullaniciyi `/session` ekranina yonlendirir; backend runner yine session check ile guvenli abort uretir.
 - Durum degerleri `InvoiceStatus` enum'u ile merkezi tutulur.

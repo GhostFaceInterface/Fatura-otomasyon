@@ -58,3 +58,9 @@ Canli pilot bulgusu:
 - Portal KDV 0 secilince "Fatura Tipi ISTISNA olarak degistirilmistir" bilgi mesajini gosterir; bu normaldir ve fail sayilmamalidir.
 - TCKN girildikten sonra `#txtTaxSchemeName` dolu gelirse kisi daha once sorgulanmis kabul edilir, kontor harcamamak icin Turmob butonuna tekrar basilmaz.
 - Taslak kaydet butonu sonrasi portal yuklenmesi icin 2 saniyelik kontrollu bekleme eklendi.
+
+Yeni operasyonel ihtiyac:
+
+- Toplu taslak olusturma sirasinda bilgisayar uyumamali.
+- Sleep prevention sadece batch run scope'unda aktiftir; import/session/kayit listeleme sirasinda sistem uyku ayari degistirilmez.
+- `.env` ile `SLEEP_PREVENTION_ENABLED`, `SLEEP_PREVENTION_PLATFORM` ve `SLEEP_PREVENTION_KEEP_DISPLAY_AWAKE` yonetilir.

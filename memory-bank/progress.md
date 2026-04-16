@@ -178,3 +178,12 @@ Tamamlandi:
 - Turmob atlanan durumda mevcut ad/soyad alanlari yine local kayitla dogrulanir.
 - Taslak Kaydet sonrasi portal yuklenmesi icin 2 saniyelik bekleme eklendi.
 - Test paketi 66 test ile basarili calisti.
+
+## Batch Sleep Prevention
+
+Tamamlandi:
+
+- Batch run sirasinda bilgisayarin uyumasini engelleyen `SleepPreventionGuard` eklendi.
+- macOS icin `caffeinate`, Windows icin `SetThreadExecutionState`, Linux icin `systemd-inhibit` desteklenir.
+- Sleep prevention sadece toplu taslak olusturma islenirken aktiftir ve batch bitince otomatik kapatilir.
+- `.env.example`, README, kullanim kilavuzu ve operasyon checklist guncellendi.

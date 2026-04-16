@@ -60,6 +60,11 @@ FIELD_WAIT_TIMEOUT_MS=30000
 REDIRECT_WAIT_TIMEOUT_MS=30000
 TURMOB_LOOKUP_RETRY_COUNT=2
 RETRY_BACKOFF_BASE_MS=500
+TAX_SCHEME_PREFILL_WAIT_MS=2000
+DRAFT_SAVE_WAIT_MS=2000
+SLEEP_PREVENTION_ENABLED=true
+SLEEP_PREVENTION_PLATFORM=auto
+SLEEP_PREVENTION_KEEP_DISPLAY_AWAKE=true
 MAL_HIZMET_ADI=YURT DIŞI KONAKLAMA BEDELİ
 PARA_BIRIMI=USD
 KDV_ORANI=0
@@ -70,6 +75,8 @@ DEFAULT_ILCE=**
 ```
 
 2FA kodu `.env` icinde tutulmaz. Kod acik browser uzerinden kullanici tarafindan girilir.
+
+Sleep prevention ayarlari sadece batch/taslak olusturma sirasinda kullanilir. Import, kayit listeleme veya session ekraninda bilgisayarin uyku davranisi degistirilmez. `SLEEP_PREVENTION_PLATFORM=auto` macOS, Windows ve Linux'u otomatik algilar; gerekirse `macos`, `windows` veya `linux` olarak elle yazilabilir.
 
 ## 5. Uygulamayi Calistirma
 
@@ -149,6 +156,8 @@ Login sonrasi uc sinyal izlenir:
 
 Batch siralidir. Kayit bazli hatalarda sonraki kayda gecilir. Session veya navigation kritik hatasinda batch guvenli sekilde durur.
 
+Batch calisirken uygulama bilgisayarin uyumasini engellemeye calisir. macOS'ta `caffeinate`, Windows'ta native execution state, Linux'ta `systemd-inhibit` kullanilir. Batch tamamlaninca veya hata nedeniyle durunca bu engel otomatik kapatilir.
+
 ## 14. Hata Statusleri
 
 - `PENDING`: import edildi, islem bekliyor.
@@ -195,9 +204,10 @@ Batch raporunda screenshot path gorunuyorsa ilgili kaydin hata anindaki ekran go
 5. Records ekraninda sadece aktif donem kayitlari mi gorunuyor?
 6. Secili kayit sayisi beklenen sayi mi?
 7. Session durumu `READY` mi?
-8. Ilk deneme kucuk kayit grubu ile yapildi mi?
-9. Batch sonrasi success/fail/skip dagilimi kontrol edildi mi?
-10. Hata screenshot ve loglari incelendi mi?
+8. `.env` icinde sleep prevention ayarlari dogru mu?
+9. Ilk deneme kucuk kayit grubu ile yapildi mi?
+10. Batch sonrasi success/fail/skip dagilimi kontrol edildi mi?
+11. Hata screenshot ve loglari incelendi mi?
 
 ## Test
 

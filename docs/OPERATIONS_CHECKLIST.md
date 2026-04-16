@@ -25,10 +25,12 @@
 - Secili uygun kayit sayisi beklenen sayi mi?
 - Session durumu `READY` mi?
 - Browser acik ve portal session kullanilabilir mi?
+- `.env` icinde sleep prevention ayarlari aktif mi?
 - Ilk kullanimda kucuk kayit grubu ile deneme yapildi mi?
 
 ## D. Batch Sirasinda
 
+- Bilgisayar uyumamali; sleep prevention logu `data/logs/app.log` icinde gorulebilir.
 - Portal ekraninda beklenmeyen popup var mi?
 - Uygulama batch sonuc ekranina donuyor mu?
 - Kritik abort mesaji gorulurse islem durdurulup log incelendi mi?

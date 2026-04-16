@@ -76,7 +76,25 @@ class FakeDraftService:
         )
 
 
+class FakeSleepGuard:
+    enter_count = 0
+    exit_count = 0
+
+    def __enter__(self) -> "FakeSleepGuard":
+        FakeSleepGuard.enter_count += 1
+        return self
+
+    def __exit__(self, exc_type, exc, traceback) -> None:
+        FakeSleepGuard.exit_count += 1
+
+
+def _reset_fake_sleep_guard() -> None:
+    FakeSleepGuard.enter_count = 0
+    FakeSleepGuard.exit_count = 0
+
+
 def test_batch_runner_continues_after_record_level_errors() -> None:
+    _reset_fake_sleep_guard()
     records = [_record(1), _record(2), _record(3)]
     draft_service = FakeDraftService(
         records,
@@ -92,6 +110,7 @@ def test_batch_runner_continues_after_record_level_errors() -> None:
         session_manager=FakeSessionManager(),
         navigation=navigation,
         navigation_retry_count=2,
+        sleep_prevention_factory=FakeSleepGuard,
     )
 
     report = runner.run(records)
@@ -103,9 +122,12 @@ def test_batch_runner_continues_after_record_level_errors() -> None:
     assert report.skipped_count == 1
     assert report.aborted_due_to_session_loss is False
     assert navigation.next_calls == 2
+    assert FakeSleepGuard.enter_count == 1
+    assert FakeSleepGuard.exit_count == 1
 
 
 def test_batch_runner_stops_on_session_abort_status() -> None:
+    _reset_fake_sleep_guard()
     records = [_record(1), _record(2), _record(3)]
     draft_service = FakeDraftService(
         records,
@@ -120,6 +142,7 @@ def test_batch_runner_stops_on_session_abort_status() -> None:
         session_manager=FakeSessionManager(),
         navigation=FakeNavigation(),
         navigation_retry_count=2,
+        sleep_prevention_factory=FakeSleepGuard,
     )
 
     report = runner.run(records)
@@ -129,9 +152,12 @@ def test_batch_runner_stops_on_session_abort_status() -> None:
     assert report.aborted_count == 1
     assert report.aborted_due_to_session_loss is True
     assert report.abort_reason == "portal error"
+    assert FakeSleepGuard.enter_count == 1
+    assert FakeSleepGuard.exit_count == 1
 
 
 def test_batch_runner_stops_when_clean_page_reset_fails() -> None:
+    _reset_fake_sleep_guard()
     records = [_record(1), _record(2)]
     draft_service = FakeDraftService(
         records,
@@ -146,6 +172,7 @@ def test_batch_runner_stops_when_clean_page_reset_fails() -> None:
         session_manager=FakeSessionManager(),
         navigation=navigation,
         navigation_retry_count=2,
+        sleep_prevention_factory=FakeSleepGuard,
     )
 
     report = runner.run(records)
@@ -156,9 +183,12 @@ def test_batch_runner_stops_when_clean_page_reset_fails() -> None:
     assert "Yeni e-Arsiv olustur sayfasina guvenli donulemedi" in report.abort_reason
     assert navigation.next_calls == 2
     assert navigation.menu_calls == 2
+    assert FakeSleepGuard.enter_count == 1
+    assert FakeSleepGuard.exit_count == 1
 
 
 def test_batch_runner_does_not_start_without_ready_session() -> None:
+    _reset_fake_sleep_guard()
     records = [_record(1)]
     draft_service = FakeDraftService(records, [InvoiceStatus.SUCCESS_DRAFT_CREATED])
     runner = BatchRunner(
@@ -166,6 +196,7 @@ def test_batch_runner_does_not_start_without_ready_session() -> None:
         session_manager=FakeSessionManager(status=PortalSessionStatus.IDLE),
         navigation=FakeNavigation(),
         navigation_retry_count=2,
+        sleep_prevention_factory=FakeSleepGuard,
     )
 
     report = runner.run(records)
@@ -174,6 +205,8 @@ def test_batch_runner_does_not_start_without_ready_session() -> None:
     assert report.total_processed == 0
     assert report.aborted_due_to_session_loss is True
     assert "READY degil" in report.abort_reason
+    assert FakeSleepGuard.enter_count == 0
+    assert FakeSleepGuard.exit_count == 0
 
 
 def _record(record_id: int) -> InvoiceRecord:

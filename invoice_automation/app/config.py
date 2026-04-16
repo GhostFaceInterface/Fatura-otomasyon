@@ -78,6 +78,9 @@ class Settings:
     retry_backoff_base_ms: int = int(os.getenv("RETRY_BACKOFF_BASE_MS", "500"))
     tax_scheme_prefill_wait_ms: int = int(os.getenv("TAX_SCHEME_PREFILL_WAIT_MS", "2000"))
     draft_save_wait_ms: int = int(os.getenv("DRAFT_SAVE_WAIT_MS", "2000"))
+    sleep_prevention_enabled: bool = _bool_env("SLEEP_PREVENTION_ENABLED", True)
+    sleep_prevention_platform: str = os.getenv("SLEEP_PREVENTION_PLATFORM", "auto")
+    sleep_prevention_keep_display_awake: bool = _bool_env("SLEEP_PREVENTION_KEEP_DISPLAY_AWAKE", True)
 
     mal_hizmet_adi: str = os.getenv("MAL_HIZMET_ADI", "YURT DIŞI KONAKLAMA BEDELİ")
     miktar: str = os.getenv("MIKTAR", "1")

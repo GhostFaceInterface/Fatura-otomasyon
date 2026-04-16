@@ -21,6 +21,7 @@ from invoice_automation.app.schemas.draft import SingleDraftServiceResult
 from invoice_automation.app.services.draft_service import SingleDraftService
 from invoice_automation.app.services.report_service import BatchReportService
 from invoice_automation.app.utils.exceptions import SessionLostError
+from invoice_automation.app.utils.sleep_prevention import SleepPreventionGuard
 
 logger = logging.getLogger(__name__)
 
@@ -43,12 +44,14 @@ class BatchRunner:
         navigation: EArchiveNavigation | None = None,
         report_service: BatchReportService | None = None,
         navigation_retry_count: int | None = None,
+        sleep_prevention_factory: Any | None = None,
     ) -> None:
         self.session_manager = session_manager
         self.draft_service = draft_service or SingleDraftService(session_manager=session_manager)
         self.navigation = navigation or EArchiveNavigation()
         self.report_service = report_service or BatchReportService()
         self.navigation_retry_count = navigation_retry_count or settings.navigation_retry_count
+        self.sleep_prevention_factory = sleep_prevention_factory or SleepPreventionGuard
 
     def run(self, records: list[InvoiceRecord]) -> BatchRunReport:
         """Process selected records in deterministic order and return a report."""
@@ -76,53 +79,54 @@ class BatchRunner:
                 abort_reason=abort_reason,
             )
 
-        for index, record in enumerate(records, start=1):
-            record_started_at = self._utc_timestamp()
-            logger.info(
-                "Batch kayit isleme basladi | index=%s total=%s record_id=%s tc=%s",
-                index,
-                len(records),
-                record.id,
-                record.tc_kimlik_no,
-            )
+        with self.sleep_prevention_factory():
+            for index, record in enumerate(records, start=1):
+                record_started_at = self._utc_timestamp()
+                logger.info(
+                    "Batch kayit isleme basladi | index=%s total=%s record_id=%s tc=%s",
+                    index,
+                    len(records),
+                    record.id,
+                    record.tc_kimlik_no,
+                )
 
-            result = self.draft_service.create_for_record(record.id)
-            record_ended_at = self._utc_timestamp()
-            detail = self._detail_from_result(result, record_started_at, record_ended_at)
-            details.append(detail)
+                result = self.draft_service.create_for_record(record.id)
+                record_ended_at = self._utc_timestamp()
+                detail = self._detail_from_result(result, record_started_at, record_ended_at)
+                details.append(detail)
 
-            logger.info(
-                "Batch kayit sonucu | index=%s total=%s record_id=%s status=%s error_code=%s screenshot=%s",
-                index,
-                len(records),
-                detail.record_id,
-                detail.final_status,
-                detail.error_code,
-                detail.screenshot_path,
-            )
-
-            if self._is_abort_status(detail.final_status):
-                aborted_due_to_session_loss = True
-                abort_reason = detail.error_message or "Session kaybi nedeniyle batch durduruldu."
-                logger.error(
-                    "Batch kritik hata nedeniyle durduruldu | record_id=%s status=%s reason=%s",
+                logger.info(
+                    "Batch kayit sonucu | index=%s total=%s record_id=%s status=%s error_code=%s screenshot=%s",
+                    index,
+                    len(records),
                     detail.record_id,
                     detail.final_status,
-                    abort_reason,
+                    detail.error_code,
+                    detail.screenshot_path,
                 )
-                break
 
-            if index < len(records):
-                try:
-                    self._prepare_clean_create_page_for_next_record()
-                except SessionLostError as exc:
+                if self._is_abort_status(detail.final_status):
                     aborted_due_to_session_loss = True
-                    abort_reason = str(exc)
-                    logger.exception(
-                        "Batch yeni kayit ekranina donemedi; islem durduruldu | last_record_id=%s",
-                        record.id,
+                    abort_reason = detail.error_message or "Session kaybi nedeniyle batch durduruldu."
+                    logger.error(
+                        "Batch kritik hata nedeniyle durduruldu | record_id=%s status=%s reason=%s",
+                        detail.record_id,
+                        detail.final_status,
+                        abort_reason,
                     )
                     break
+
+                if index < len(records):
+                    try:
+                        self._prepare_clean_create_page_for_next_record()
+                    except SessionLostError as exc:
+                        aborted_due_to_session_loss = True
+                        abort_reason = str(exc)
+                        logger.exception(
+                            "Batch yeni kayit ekranina donemedi; islem durduruldu | last_record_id=%s",
+                            record.id,
+                        )
+                        break
 
         return self._build_report(
             total_selected=len(records),

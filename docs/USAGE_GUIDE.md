@@ -75,6 +75,8 @@ Sadece `PENDING` ve `SELECTED` durumundaki kayitlar secilebilir.
 
 Batch kayitlari id/import sirasina gore sirali isler. Kayit bazli hatalar batch'i durdurmaz. Kritik session veya navigation problemi olursa batch guvenli sekilde durur.
 
+Batch basladiginda uygulama bilgisayarin uyumasini engellemeye calisir. Bu davranis `.env` icindeki `SLEEP_PREVENTION_ENABLED`, `SLEEP_PREVENTION_PLATFORM` ve `SLEEP_PREVENTION_KEEP_DISPLAY_AWAKE` alanlariyla yonetilir. Bu engel sadece batch calisirken aktiftir; batch tamamlaninca otomatik kapanir.
+
 ## 7. Batch Sonucunu Inceleme
 
 Batch sonucu ekranda su bilgiler gorunur:

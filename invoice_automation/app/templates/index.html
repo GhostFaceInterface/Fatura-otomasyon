@@ -1,90 +1,166 @@
 {% extends "base.html" %}
 
 {% block content %}
-<section class="section">
-  <h2>Veri Yukleme</h2>
-  <p>CSV veya Excel dosyasi yukleyin. Sonraki ekranda sheet, kolon mapping ve fatura donemi adini sececeksiniz.</p>
-
-  <form class="upload-form" action="/import" method="post" enctype="multipart/form-data">
-    <label for="file">Import dosyasi</label>
-    <input id="file" name="file" type="file" accept=".csv,.xlsx,.xls" required>
-    <button type="submit">Dosyayi Yukle ve Esleştir</button>
-  </form>
-</section>
+<div class="page-header">
+  <div>
+    <div class="page-kicker">Veri import</div>
+    <h1 class="page-title">Fatura dönemi oluştur</h1>
+    <p class="page-description">
+      Excel veya CSV dosyanı yükle. Bir sonraki ekranda sheet seçip kolonları eşleştireceksin.
+    </p>
+  </div>
+</div>
 
 {% if error %}
-<section class="alert alert-error">
-  <h2>Import reddedildi</h2>
-  <p>{{ error }}</p>
-</section>
+<div class="alert alert-danger" role="alert">
+  <div class="fw-semibold">Dosya içe aktarılamadı</div>
+  <div>{{ error }}</div>
+</div>
 {% endif %}
 
 {% if result %}
-<section class="alert alert-success">
-  <h2>Import tamamlandi</h2>
-  {% if result.batch %}
-  <p>Fatura donemi: <strong>{{ result.batch.name }}</strong></p>
-  {% endif %}
-  <p><strong>{{ result.imported_count }}</strong> kayit eklendi, <strong>{{ result.failed_count }}</strong> satir atlandi.</p>
-  {% if result.batch %}
-  <p><a href="/records?batch_id={{ result.batch.id }}">Bu donemin kayitlarini goruntule</a></p>
-  {% else %}
-  <p><a href="/records">Kayitlari goruntule</a></p>
-  {% endif %}
-</section>
+<div class="alert alert-success" role="alert">
+  <div class="d-flex flex-column flex-lg-row gap-3 align-items-lg-center justify-content-between">
+    <div>
+      <div class="fw-semibold">Kayıtlar hazır</div>
+      {% if result.batch %}
+      <div>Fatura dönemi: <strong>{{ result.batch.name }}</strong></div>
+      {% endif %}
+      <div><strong>{{ result.imported_count }}</strong> kayıt eklendi, <strong>{{ result.failed_count }}</strong> satır atlandı.</div>
+    </div>
+    {% if result.batch %}
+    <a class="btn btn-success" href="/records?batch_id={{ result.batch.id }}">Kayıtları kontrol et</a>
+    {% else %}
+    <a class="btn btn-success" href="/records">Kayıtları kontrol et</a>
+    {% endif %}
+  </div>
+</div>
 
 {% if result.row_errors %}
-<section class="section">
-  <h2>Atlanan Satirlar</h2>
-  <table>
-    <thead>
-      <tr>
-        <th>Satir</th>
-        <th>Hatalar</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for row_error in result.row_errors %}
-      <tr>
-        <td>{{ row_error.row_number }}</td>
-        <td>{{ row_error.errors | join(", ") }}</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-</section>
+<div class="app-card mb-4">
+  <div class="app-card-header">
+    <div>
+      <h2 class="h5 mb-1">Atlanan satırlar</h2>
+      <p class="text-muted mb-0">Geçerli satırlar kaydedildi, hatalı satırlar raporlandı.</p>
+    </div>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead>
+        <tr>
+          <th>Satır</th>
+          <th>Sebep</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row_error in result.row_errors %}
+        <tr>
+          <td>{{ row_error.row_number }}</td>
+          <td>{{ row_error.errors | join(", ") }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
 {% endif %}
 {% endif %}
 
-<section class="section">
-  <h2>Fatura Donemleri</h2>
-  <table>
-    <thead>
-      <tr>
-        <th>ID</th>
-        <th>Ad</th>
-        <th>Dosya</th>
-        <th>Sheet</th>
-        <th>Olusturma</th>
-        <th>Aksiyon</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for batch in batches %}
-      <tr>
-        <td>{{ batch.id }}</td>
-        <td>{{ batch.name }}</td>
-        <td>{{ batch.source_file_name }}</td>
-        <td>{{ batch.sheet_name or "-" }}</td>
-        <td>{{ batch.created_at }}</td>
-        <td><a href="/records?batch_id={{ batch.id }}">Kayitlari Ac</a></td>
-      </tr>
-      {% else %}
-      <tr>
-        <td colspan="6" class="empty">Henuz fatura donemi yok.</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-</section>
+<div class="row g-4">
+  <div class="col-lg-7">
+    <div class="app-card h-100">
+      <div class="app-card-header">
+        <div>
+          <h2 class="h5 mb-1">Dosya yükle</h2>
+          <p class="text-muted mb-0">Bu adımda fatura kesilmez; sadece veriler hazırlanır.</p>
+        </div>
+      </div>
+      <div class="app-card-body">
+        <form action="/import" method="post" enctype="multipart/form-data" class="row g-3">
+          <div class="col-12">
+            <label class="form-label" for="file">Excel / CSV dosyası</label>
+            <input class="form-control form-control-lg" id="file" name="file" type="file" accept=".csv,.xlsx,.xls" required>
+            <div class="form-text">Excel için sheet ve kolon eşleştirme sonraki adımda yapılır.</div>
+          </div>
+          <div class="col-12">
+            <button class="btn btn-primary btn-lg" type="submit">Dosyayı yükle ve devam et</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-5">
+    <div class="app-card h-100">
+      <div class="app-card-header">
+        <div>
+          <h2 class="h5 mb-1">Operasyon akışı</h2>
+          <p class="text-muted mb-0">Dönemi hazırladıktan sonra kayıtları kontrol edip seç.</p>
+        </div>
+      </div>
+      <div class="app-card-body">
+        <div class="list-group list-group-flush step-list">
+          <div class="list-group-item px-0">
+            <span class="step-number">1</span>
+            Dosyayı yükle.
+          </div>
+          <div class="list-group-item px-0">
+            <span class="step-number">2</span>
+            Sheet ve kolonları eşleştir.
+          </div>
+          <div class="list-group-item px-0">
+            <span class="step-number">3</span>
+            Aktif fatura dönemindeki kayıtları seç.
+          </div>
+          <div class="list-group-item px-0">
+            <span class="step-number">4</span>
+            Portal oturumu hazır olunca taslakları oluştur.
+          </div>
+        </div>
+        <div class="alert alert-info mt-3 mb-0">
+          GİB gönderimi yok. Sistem yalnızca e-Arşiv taslak faturası oluşturur.
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="app-card mt-4">
+  <div class="app-card-header">
+    <div>
+      <h2 class="h5 mb-1">Mevcut fatura dönemleri</h2>
+      <p class="text-muted mb-0">Eski ve yeni importlar birbirine karışmaz. İşlem yapacağın dönemi buradan aç.</p>
+    </div>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead>
+        <tr>
+          <th>Dönem</th>
+          <th>Dosya</th>
+          <th>Sheet</th>
+          <th>Oluşturma</th>
+          <th class="text-end">Aksiyon</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for batch in batches %}
+        <tr>
+          <td class="fw-semibold">{{ batch.name }}</td>
+          <td>{{ batch.source_file_name }}</td>
+          <td>{{ batch.sheet_name or "-" }}</td>
+          <td>{{ batch.created_at }}</td>
+          <td class="text-end">
+            <a class="btn btn-outline-primary btn-sm" href="/records?batch_id={{ batch.id }}">Aç</a>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="5" class="text-center text-muted py-4">Henüz fatura dönemi yok.</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
 {% endblock %}

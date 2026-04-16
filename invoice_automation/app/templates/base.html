@@ -3,27 +3,78 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{{ title or "e-Arsiv Fatura Otomasyonu" }}</title>
+    <title>{{ title or "e-Arşiv Taslak Fatura" }}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', path='/css/app.css') }}">
   </head>
   <body>
-    <header class="topbar">
-      <div>
-        <h1>e-Arsiv Fatura Otomasyonu</h1>
-        <p>Lokal taslak fatura hazirlik paneli</p>
+    {% set current_path = request.url.path if request is defined else "/" %}
+    <nav class="navbar navbar-expand-lg bg-white border-bottom sticky-top app-navbar">
+      <div class="container-fluid px-4">
+        <a class="navbar-brand d-flex align-items-center gap-2" href="/">
+          <span class="brand-mark">EF</span>
+          <span>
+            <span class="brand-title">e-Arşiv Taslak Fatura</span>
+            <span class="brand-subtitle">Lokal operasyon paneli</span>
+          </span>
+        </a>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNavigation" aria-controls="mainNavigation" aria-expanded="false" aria-label="Menüyü aç">
+          <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="mainNavigation">
+          <ul class="navbar-nav ms-auto gap-lg-1">
+            <li class="nav-item">
+              <a class="nav-link {% if current_path == '/' or current_path.startswith('/import') %}active{% endif %}" href="/">Veri Yükle</a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link {% if current_path.startswith('/records') %}active{% endif %}" href="/records">Kayıtlar</a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link {% if current_path.startswith('/session') %}active{% endif %}" href="/session">Oturum</a>
+            </li>
+            <li class="nav-item">
+              <a class="nav-link {% if current_path.startswith('/batch') %}active{% endif %}" href="/batch">Taslak Oluştur</a>
+            </li>
+          </ul>
+        </div>
       </div>
-      <nav>
-        <a href="/">Veri Yukle</a>
-        <a href="/records">Kayitlar</a>
-        <a href="/batch">Batch</a>
-        <a href="/session">Session</a>
-        <a href="/draft">Draft POC</a>
-        <a href="/api/health">Health</a>
-      </nav>
-    </header>
+    </nav>
 
-    <main class="page">
+    <main class="container-xxl py-4 py-lg-5">
+      <section class="workflow-card mb-4">
+        <div class="workflow-step {% if current_path == '/' or current_path.startswith('/import') %}active{% endif %}">
+          <span>1</span>
+          <div>
+            <strong>Veri yükle</strong>
+            <small>Excel/CSV hazırla</small>
+          </div>
+        </div>
+        <div class="workflow-step {% if current_path.startswith('/records') %}active{% endif %}">
+          <span>2</span>
+          <div>
+            <strong>Kayıt seç</strong>
+            <small>Kişileri kontrol et</small>
+          </div>
+        </div>
+        <div class="workflow-step {% if current_path.startswith('/session') %}active{% endif %}">
+          <span>3</span>
+          <div>
+            <strong>Oturum aç</strong>
+            <small>Portal hazır olsun</small>
+          </div>
+        </div>
+        <div class="workflow-step {% if current_path.startswith('/batch') %}active{% endif %}">
+          <span>4</span>
+          <div>
+            <strong>Taslak oluştur</strong>
+            <small>Seçili kayıtları işle</small>
+          </div>
+        </div>
+      </section>
+
       {% block content %}{% endblock %}
     </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   </body>
 </html>

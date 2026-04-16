@@ -64,3 +64,20 @@ Yeni operasyonel ihtiyac:
 - Toplu taslak olusturma sirasinda bilgisayar uyumamali.
 - Sleep prevention sadece batch run scope'unda aktiftir; import/session/kayit listeleme sirasinda sistem uyku ayari degistirilmez.
 - `.env` ile `SLEEP_PREVENTION_ENABLED`, `SLEEP_PREVENTION_PLATFORM` ve `SLEEP_PREVENTION_KEEP_DISPLAY_AWAKE` yonetilir.
+
+UI sadeleştirme odağı:
+
+- Ana arayuz teknik faz/POC terminolojisinden temizlenir.
+- Kullanici akisi 4 adima indirildi: veri yukle, kayit sec, oturum ac, taslak olustur.
+- Ana navigasyonda `Draft POC` ve `Health` gibi operasyon disi linkler gosterilmez.
+- Kayıt ve taslak ekranlari sadece operasyon icin gerekli kolon ve aksiyonlari one cikarir.
+- Gorsel tasarim ust navbar, 4 adimli is akisi, kartlar, durum rozetleri ve daha okunabilir tablolarla yeniden kuruldu.
+
+Guncel frontend redesign:
+
+- Kullanici istegiyle arayuz Bootstrap 5 tabanli profesyonel operasyon paneline tasindi.
+- FastAPI + Jinja server-side rendering ve mevcut backend route/form action yapisi korunur.
+- Base layout ust navbar, marka alani ve 4 adimli is akisi karti icerir.
+- Records ekrani aktif fatura donemi, secili/gorunen/uygun metrikleri, filtre karti, aksiyon grubu ve Bootstrap tabloyla yeniden tasarlandi.
+- Import, kolon mapping, session, batch ve draft POC ekranlari ayni Bootstrap kart/form/alert/table diliyle tutarli hale getirildi.
+- Bootstrap CDN kullanilir; proje offline zorunlu hale gelirse Bootstrap asset'leri lokal olarak vendor edilebilir.

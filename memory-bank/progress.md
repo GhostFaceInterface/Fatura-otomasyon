@@ -187,3 +187,26 @@ Tamamlandi:
 - macOS icin `caffeinate`, Windows icin `SetThreadExecutionState`, Linux icin `systemd-inhibit` desteklenir.
 - Sleep prevention sadece toplu taslak olusturma islenirken aktiftir ve batch bitince otomatik kapatilir.
 - `.env.example`, README, kullanim kilavuzu ve operasyon checklist guncellendi.
+
+## UI Sadeleştirme
+
+Tamamlandi:
+
+- Ana navigasyon 4 adimli kullanici akisina indirildi: veri yukle, kayit sec, oturum ac, taslak olustur.
+- `Draft POC`, `Health`, `Batch`, `Session`, `Faz` gibi teknik/eski metinler ana UI'dan temizlendi.
+- Veri yukleme, kolon eslestirme, kayit secimi, oturum ve taslak olusturma ekranlari daha sade ve operasyon odakli metinlerle guncellendi.
+- Records ekraninda gereksiz kaynak/aciklama kolonlari ana listeden kaldirildi; temel alanlar one cikarildi.
+- Batch ekraninda hazirlik/progress POC anlatimi kaldirildi; secili kayit, toplam tutar, oturum durumu, sonuc raporu ve detay filtresi korundu.
+- Jinja template parse kontrolu ve tum test paketi basarili calisti.
+
+## UI Gorsel Yenileme
+
+Tamamlandi:
+
+- Bootstrap 5 CDN base layout'a eklendi; FastAPI + Jinja server-rendered mimari korunur.
+- Ustte daginik debug linkleri yerine profesyonel navbar ve 4 adimli operasyon akisi kullanilir.
+- Records ekrani aktif fatura donemi, gorunen/uygun/secili kayit metrikleri, filtre karti, aksiyon butonlari ve modern tabloyla yeniden tasarlandi.
+- Import, kolon mapping, session, batch raporu ve tek kayit POC ekranlari ayni Bootstrap kart/form/alert/table diline tasindi.
+- Form, tablo, status rozeti, session state, metric card ve rapor filtreleri `static/css/app.css` icinde merkezi stillenir.
+- Bootstrap CDN kullanildigi icin tam offline kullanim istenirse ileride Bootstrap asset'leri lokal vendor edilebilir.
+- Jinja template parse kontrolu ve tum test paketi 68 test ile basarili calisti.

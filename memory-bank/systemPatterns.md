@@ -22,6 +22,10 @@
 - Sleep prevention macOS icin `caffeinate`, Windows icin `SetThreadExecutionState`, Linux icin `systemd-inhibit` kullanir.
 - Batch raporu `BatchReportService` ile status dagilimi ve kayit detaylarina donusturulur.
 - UI batch run, session READY degilken kullaniciyi `/session` ekranina yonlendirir; backend runner yine session check ile guvenli abort uretir.
+- Ana UI bilgi mimarisi 4 adimli operasyon akisi uzerine kuruludur: veri yukle, kayit sec, oturum ac, taslak olustur.
+- POC/diagnostic ekranlar route olarak kalabilir ancak ana navigasyon operasyon kullanicisina sadece gerekli akisi gosterir.
+- UI gorsel sistemi Bootstrap 5 + merkezi `static/css/app.css` uzerine tasindi; server-rendered Jinja yapisi korunur.
+- Ana layout ust navbar, 4 adimli is akisi, Bootstrap kart/form/alert/table/badge bilesenleri ve tutar/status kartlariyla kurumsal operasyon paneli seklinde calisir.
 - Durum degerleri `InvoiceStatus` enum'u ile merkezi tutulur.
 - Portal otomasyonu `automation/` katmaninda Playwright ile ayrilir.
 - Kayit bazli hatalar batch'i durdurmaz; session-level veya temiz form reset hatalari batch'i guvenli durdurur.

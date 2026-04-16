@@ -154,6 +154,8 @@ def records(
 ) -> HTMLResponse:
     """Render invoice records as a table."""
 
+    status = status or None
+    q = q or None
     repository = InvoiceRecordRepository()
     active_batch = _active_batch(repository, request.query_params.get("batch_id"))
     active_batch_id = active_batch.id if active_batch else None
@@ -164,6 +166,13 @@ def records(
     )
     statuses = [status_value.value for status_value in InvoiceStatus]
     selected_count = len(repository.list_selected(batch_id=active_batch_id))
+    eligible_count = len(
+        [
+            record
+            for record in invoice_records
+            if record.islem_durumu in {InvoiceStatus.PENDING.value, InvoiceStatus.SELECTED.value}
+        ]
+    )
     return templates.TemplateResponse(
         "records.html",
         {
@@ -175,6 +184,7 @@ def records(
             "search_query": q or "",
             "statuses": statuses,
             "selected_count": selected_count,
+            "eligible_count": eligible_count,
             "selection_saved": request.query_params.get("selection_saved") == "1",
         },
     )

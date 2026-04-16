@@ -1,129 +1,159 @@
 {% extends "base.html" %}
 
 {% block content %}
-<section class="section">
-  <div class="section-header">
-    <div>
-      <h2>Kayitlar</h2>
-      <p>Secilen fatura donemine ait PENDING kayitlar secilebilir ve batch hazirligina alinabilir.</p>
-    </div>
-    <div class="header-actions">
-      <a class="button-link secondary" href="/">Yeni Dosya Yukle</a>
-      {% if active_batch %}
-      <a class="button-link" href="/batch?batch_id={{ active_batch.id }}">Batch Hazirligi</a>
-      {% endif %}
-    </div>
+<div class="page-header">
+  <div>
+    <div class="page-kicker">Kayıt kontrolü</div>
+    <h1 class="page-title">Kayıtları kontrol et ve seç</h1>
+    <p class="page-description">Aktif fatura dönemindeki kişileri kontrol et, taslak oluşturulacak kayıtları işaretle ve seçimi kaydet.</p>
   </div>
-
-  <form class="upload-form" action="/records" method="get">
-    <label for="batch_id">Fatura Donemi</label>
-    <select id="batch_id" name="batch_id" required>
-      {% for batch in batches %}
-      <option value="{{ batch.id }}" {% if active_batch and batch.id == active_batch.id %}selected{% endif %}>{{ batch.name }}</option>
-      {% endfor %}
-    </select>
-    {% if selected_status %}
-    <input type="hidden" name="status" value="{{ selected_status }}">
-    {% endif %}
-    {% if search_query %}
-    <input type="hidden" name="q" value="{{ search_query }}">
-    {% endif %}
-    <button type="submit" class="secondary-button">Donemi Ac</button>
-  </form>
-
-  {% if active_batch %}
-  <p class="muted">Aktif donem: <strong>{{ active_batch.name }}</strong> ({{ active_batch.source_file_name }} / {{ active_batch.sheet_name or "-" }})</p>
-  {% else %}
-  <div class="alert inline-error">Henuz fatura donemi yok. Once veri yukleyip batch/fatura donemi olusturun.</div>
-  {% endif %}
-
-  {% if selection_saved %}
-  <div class="alert inline-success">
-    Secim kaydedildi. Secili kayit sayisi: <strong>{{ selected_count }}</strong>.
-  </div>
-  {% endif %}
-
-  <div class="filters">
-    <a class="{{ 'active' if not selected_status else '' }}" href="/records{% if active_batch %}?batch_id={{ active_batch.id }}{% if search_query %}&q={{ search_query|urlencode }}{% endif %}{% endif %}">Tum Durumlar</a>
-    {% for status in statuses %}
-      <a class="{{ 'active' if selected_status == status else '' }}" href="/records?{% if active_batch %}batch_id={{ active_batch.id }}&{% endif %}status={{ status }}{% if search_query %}&q={{ search_query|urlencode }}{% endif %}">{{ status }}</a>
-    {% endfor %}
-  </div>
-
-  <form class="upload-form" action="/records" method="get">
+  <div class="action-bar">
+    <a class="btn btn-outline-secondary" href="/">Yeni dosya yükle</a>
     {% if active_batch %}
-    <input type="hidden" name="batch_id" value="{{ active_batch.id }}">
+    <a class="btn btn-outline-primary" href="/session">Oturum aç</a>
+    <a class="btn btn-primary" href="/batch?batch_id={{ active_batch.id }}">Taslak oluştur</a>
     {% endif %}
-    {% if selected_status %}
-    <input type="hidden" name="status" value="{{ selected_status }}">
-    {% endif %}
-    <label for="q">Aktif donemde ara</label>
-    <input id="q" type="text" name="q" value="{{ search_query }}" placeholder="Ad, soyad veya TCKN">
-    <button type="submit" class="secondary-button">Ara</button>
-    {% if search_query and active_batch %}
-    <a class="button-link secondary" href="/records?batch_id={{ active_batch.id }}{% if selected_status %}&status={{ selected_status }}{% endif %}">Aramayi Temizle</a>
-    {% endif %}
-  </form>
+  </div>
+</div>
 
-  <form action="/records/selection" method="post">
-    {% if active_batch %}
-    <input type="hidden" name="batch_id" value="{{ active_batch.id }}">
-    {% endif %}
-    <div class="table-actions">
-      <div>
-        Gorunen kayit: <strong>{{ records|length }}</strong>
-        · Secili uygun kayit: <strong>{{ selected_count }}</strong>
+{% if active_batch %}
+<div class="context-card mb-4">
+  <div class="row g-3 align-items-center">
+    <div class="col-lg-7">
+      <span>Aktif fatura dönemi</span>
+      <strong>{{ active_batch.name }}</strong>
+      <span>{{ active_batch.source_file_name }} / {{ active_batch.sheet_name or "-" }}</span>
+    </div>
+    <div class="col-lg-5">
+      <div class="row g-2">
+        <div class="col-4">
+          <div class="metric-label">Görünen</div>
+          <div class="fw-bold">{{ records|length }}</div>
+        </div>
+        <div class="col-4">
+          <div class="metric-label">Uygun</div>
+          <div class="fw-bold">{{ eligible_count }}</div>
+        </div>
+        <div class="col-4">
+          <div class="metric-label">Seçili</div>
+          <div class="fw-bold">{{ selected_count }}</div>
+        </div>
       </div>
-      <button type="submit" {% if not active_batch %}disabled{% endif %}>Secimi Kaydet</button>
+    </div>
+  </div>
+</div>
+{% else %}
+<div class="alert alert-warning">Henüz fatura dönemi yok. Önce veri yükleyip fatura dönemi oluştur.</div>
+{% endif %}
+
+{% if selection_saved %}
+<div class="alert alert-success">Seçim kaydedildi. Seçili kayıt sayısı: <strong>{{ selected_count }}</strong>.</div>
+{% endif %}
+
+<div class="app-card mb-4">
+  <div class="app-card-header">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+      <div>
+        <h2 class="h5 mb-1">Filtreler</h2>
+        <p class="small-muted mb-0">Dönem, durum veya kişi bilgisine göre listeyi daralt.</p>
+      </div>
+    </div>
+  </div>
+  <div class="app-card-body">
+    <form action="/records" method="get" class="row g-3 align-items-end">
+      <div class="col-lg-4">
+        <label for="batch_id" class="form-label">Fatura dönemi</label>
+        <select id="batch_id" name="batch_id" class="form-select" required>
+          {% for batch in batches %}
+          <option value="{{ batch.id }}" {% if active_batch and batch.id == active_batch.id %}selected{% endif %}>{{ batch.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-lg-3">
+        <label for="status" class="form-label">Durum</label>
+        <select id="status" name="status" class="form-select">
+          <option value="">Tüm kayıtlar</option>
+          {% for status in statuses %}
+          <option value="{{ status }}" {% if selected_status == status %}selected{% endif %}>{{ status }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-lg-3">
+        <label for="q" class="form-label">Arama</label>
+        <input id="q" type="text" name="q" class="form-control" value="{{ search_query }}" placeholder="Ad, soyad veya TCKN">
+      </div>
+      <div class="col-lg-2 d-grid">
+        <button type="submit" class="btn btn-outline-primary">Filtrele</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<form action="/records/selection" method="post">
+  {% if active_batch %}
+  <input type="hidden" name="batch_id" value="{{ active_batch.id }}">
+  {% endif %}
+
+  <div class="app-card">
+    <div class="app-card-header">
+      <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
+        <div>
+          <h2 class="h5 mb-1">Kayıt listesi</h2>
+          <p class="small-muted mb-0">Yalnızca PENDING ve SELECTED kayıtlar seçilebilir.</p>
+        </div>
+        <button type="submit" class="btn btn-primary" {% if not active_batch %}disabled{% endif %}>Seçimi kaydet</button>
+      </div>
     </div>
 
-    <table>
-      <thead>
-        <tr>
-          <th>
-            <label>
-              <input id="select-all-records" type="checkbox">
-              Tumunu Sec
-            </label>
-          </th>
-          <th>ID</th>
-          <th>Ad</th>
-          <th>Soyad</th>
-          <th>TCKN</th>
-          <th>Tutar USD</th>
-          <th>Durum</th>
-          <th>Kaynak</th>
-          <th>Aciklama</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for record in records %}
-        <tr>
-          <td>
-            {% if record.islem_durumu in ["PENDING", "SELECTED"] %}
+    <div class="table-responsive">
+      <table class="table table-hover align-middle">
+        <thead>
+          <tr>
+            <th style="width: 150px;">
+              <label class="d-inline-flex align-items-center gap-2 mb-0">
+                <input id="select-all-records" type="checkbox">
+                Tümünü seç
+              </label>
+            </th>
+            <th>Ad</th>
+            <th>Soyad</th>
+            <th>TC kimlik no</th>
+            <th>Tutar</th>
+            <th>Durum</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for record in records %}
+          <tr>
+            <td>
+              {% if record.islem_durumu in ["PENDING", "SELECTED"] %}
               <input class="record-select-checkbox" type="checkbox" name="selected_record_ids" value="{{ record.id }}" {% if record.secili_mi %}checked{% endif %}>
-            {% else %}
+              {% else %}
               <input type="checkbox" {% if record.secili_mi %}checked{% endif %} disabled>
-            {% endif %}
-          </td>
-          <td>{{ record.id }}</td>
-          <td>{{ record.ad }}</td>
-          <td>{{ record.soyad }}</td>
-          <td>{{ record.tc_kimlik_no }}</td>
-          <td>{{ "%.2f"|format(record.tutar_usd) }}</td>
-          <td><span class="status">{{ record.islem_durumu }}</span></td>
-          <td>{{ record.kaynak_dosya or "-" }}{% if record.kaynak_satir_no %}:{{ record.kaynak_satir_no }}{% endif %}</td>
-          <td>{{ record.aciklama or "-" }}</td>
-        </tr>
-        {% else %}
-        <tr>
-          <td colspan="9" class="empty">Kayit bulunamadi.</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </form>
-</section>
+              {% endif %}
+            </td>
+            <td>{{ record.ad }}</td>
+            <td>{{ record.soyad }}</td>
+            <td>{{ record.tc_kimlik_no }}</td>
+            <td>{{ "%.2f"|format(record.tutar_usd) }} USD</td>
+            <td>
+              <span class="status-badge {% if record.islem_durumu == 'SUCCESS_DRAFT_CREATED' %}status-success{% elif record.islem_durumu.startswith('FAILED_') %}status-failed{% elif record.islem_durumu == 'SELECTED' %}status-selected{% else %}status-neutral{% endif %}">
+                {{ record.islem_durumu }}
+              </span>
+            </td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="6">
+              <div class="empty-state">Bu filtrelerle kayıt bulunamadı.</div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</form>
 
 <script>
   const selectAll = document.getElementById("select-all-records");

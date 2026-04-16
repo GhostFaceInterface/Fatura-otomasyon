@@ -1,225 +1,257 @@
 {% extends "base.html" %}
 
 {% block content %}
-<section class="section">
-  <div class="section-header">
-    <div>
-      <h2>Batch Hazirligi</h2>
-      <p>Aktif fatura donemindeki secili PENDING/SELECTED kayitlar sirayla taslak olusturma akisina verilir.</p>
-    </div>
-    <div class="header-actions">
-      <a class="button-link secondary" href="/records{% if active_batch %}?batch_id={{ active_batch.id }}{% endif %}">Kayit Secimine Don</a>
-      <a class="button-link" href="/draft">Tek Kayit Draft POC</a>
-    </div>
+<div class="page-header">
+  <div>
+    <div class="page-kicker">Toplu taslak</div>
+    <h1 class="page-title">Seçili kayıtlar için taslak oluştur</h1>
+    <p class="page-description">
+      Sadece aktif fatura dönemindeki seçili kayıtlar işlenir. Kayıt bazlı hata batch'i durdurmaz.
+    </p>
   </div>
+  <a class="btn btn-outline-secondary" href="/records{% if active_batch %}?batch_id={{ active_batch.id }}{% endif %}">Kayıt seçimine dön</a>
+</div>
 
-  <form class="upload-form" action="/batch" method="get">
-    <label for="batch_id">Fatura Donemi</label>
-    <select id="batch_id" name="batch_id" required>
-      {% for batch in batches %}
-      <option value="{{ batch.id }}" {% if active_batch and batch.id == active_batch.id %}selected{% endif %}>{{ batch.name }}</option>
-      {% endfor %}
-    </select>
-    <button type="submit" class="secondary-button">Donemi Ac</button>
-  </form>
-
-  {% if active_batch %}
-  <p class="muted">Aktif donem: <strong>{{ active_batch.name }}</strong> ({{ active_batch.source_file_name }} / {{ active_batch.sheet_name or "-" }})</p>
-  {% else %}
-  <div class="alert inline-error">Batch baslatmak icin once bir fatura donemi olusturun.</div>
-  {% endif %}
-
-  <div class="session-banner {{ 'ready' if session_ready else 'blocked' }}">
-    <strong>Session:</strong> {{ session_state.status }} · {{ session_state.message }}
-    {% if not session_ready %}
-    <a class="button-link secondary compact" href="/session">Session Baslat</a>
-    {% endif %}
-  </div>
-
-  {% if prepared %}
-  <div class="alert inline-success">
-    Batch hazirlandi. Toplam secili kayit: <strong>{{ preview.total_selected }}</strong>.
-  </div>
-  {% endif %}
-
-  <div class="summary-grid">
-    <div class="summary-item">
-      <span>Secili Kayit</span>
-      <strong>{{ preview.total_selected }}</strong>
-    </div>
-    <div class="summary-item">
-      <span>Toplam USD</span>
-      <strong>{{ "%.2f"|format(preview.total_amount_usd) }}</strong>
-    </div>
-    <div class="summary-item">
-      <span>Progress</span>
-      <strong>{{ preview.completed_count }} / {{ preview.total_selected }}</strong>
-    </div>
-  </div>
-
-  <div class="progress-bar" aria-label="Batch progress">
-    <div style="width: {{ preview.progress_percent }}%"></div>
-  </div>
-
-  <form action="/batch/prepare" method="post" class="batch-form">
+<div class="context-card mb-4">
+  <div>
+    <div class="context-label">Aktif fatura dönemi</div>
     {% if active_batch %}
-    <input type="hidden" name="batch_id" value="{{ active_batch.id }}">
+    <div class="context-title">{{ active_batch.name }}</div>
+    <div class="context-meta">{{ active_batch.source_file_name }} / {{ active_batch.sheet_name or "-" }}</div>
+    {% else %}
+    <div class="context-title">Fatura dönemi seçilmedi</div>
+    <div class="context-meta">Taslak oluşturmak için önce bir dönem oluştur veya seç.</div>
     {% endif %}
-    <button type="submit" {% if preview.total_selected == 0 or not active_batch %}disabled{% endif %}>Batch'e Hazirla</button>
+  </div>
+  <form action="/batch" method="get" class="row g-2 align-items-end batch-switcher">
+    <div class="col-sm-auto">
+      <label class="form-label" for="batch_id">Dönem değiştir</label>
+      <select class="form-select" id="batch_id" name="batch_id" required>
+        {% for batch in batches %}
+        <option value="{{ batch.id }}" {% if active_batch and batch.id == active_batch.id %}selected{% endif %}>{{ batch.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-sm-auto">
+      <button type="submit" class="btn btn-outline-primary">Dönemi aç</button>
+    </div>
   </form>
+</div>
 
-  <form action="/batch/run" method="post" class="batch-form">
-    {% if active_batch %}
-    <input type="hidden" name="batch_id" value="{{ active_batch.id }}">
-    {% endif %}
-    <button type="submit" {% if preview.total_selected == 0 or not active_batch or not session_ready %}disabled{% endif %}>
-      Secilileri Taslak Olustur
-    </button>
-  </form>
+<div class="row g-4">
+  <div class="col-lg-8">
+    <div class="app-card h-100">
+      <div class="app-card-header">
+        <div>
+          <h2 class="h5 mb-1">Batch hazırlığı</h2>
+          <p class="text-muted mb-0">Gerçekten işlenecek kayıt sayısı ve oturum durumu burada görünür.</p>
+        </div>
+      </div>
+      <div class="app-card-body">
+        {% if prepared %}
+        <div class="alert alert-success" role="alert">
+          Seçili kayıtlar hazır. Toplam: <strong>{{ preview.total_selected }}</strong>.
+        </div>
+        {% endif %}
 
-  {% if not session_ready %}
-  <p class="muted">Batch calistirmadan once session durumunun <code>READY</code> olmasi gerekir.</p>
-  {% endif %}
+        <div class="row g-3 mb-4">
+          <div class="col-sm-6">
+            <div class="metric-card">
+              <span>İşlenecek kayıt</span>
+              <strong>{{ preview.total_selected }}</strong>
+            </div>
+          </div>
+          <div class="col-sm-6">
+            <div class="metric-card">
+              <span>Toplam USD</span>
+              <strong>{{ "%.2f"|format(preview.total_amount_usd) }}</strong>
+            </div>
+          </div>
+        </div>
 
-  {% if preview.total_selected == 0 %}
-  <p class="muted">Batch hazirlamak icin once kayit ekranindan en az bir PENDING kayit secin.</p>
-  {% else %}
-  <p class="muted">Batch run sadece secili ve durumu PENDING/SELECTED olan kayitlari isler. Eski basari/hata durumlari yeniden denenmez.</p>
-  {% endif %}
-</section>
+        <form action="/batch/run" method="post" class="d-grid d-md-block">
+          {% if active_batch %}
+          <input type="hidden" name="batch_id" value="{{ active_batch.id }}">
+          {% endif %}
+          <button class="btn btn-primary btn-lg" type="submit" {% if preview.total_selected == 0 or not active_batch or not session_ready %}disabled{% endif %}>
+            Seçili kayıtlar için taslak oluştur
+          </button>
+        </form>
+
+        {% if not session_ready %}
+        <div class="alert alert-warning mt-3 mb-0" role="alert">
+          Batch başlatmak için portal oturumu <code>READY</code> olmalı.
+        </div>
+        {% elif preview.total_selected == 0 %}
+        <div class="alert alert-secondary mt-3 mb-0" role="alert">
+          Önce kayıt ekranından en az bir uygun kayıt seç.
+        </div>
+        {% else %}
+        <div class="alert alert-info mt-3 mb-0" role="alert">
+          Sadece seçili ve işlenebilir durumdaki kayıtlar çalışır. Başarılı veya hatalı bitmiş kayıtlar otomatik yeniden denenmez.
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-4">
+    <div class="app-card h-100">
+      <div class="app-card-header">
+        <div>
+          <h2 class="h5 mb-1">Portal oturumu</h2>
+          <p class="text-muted mb-0">Batch için session hazır olmalı.</p>
+        </div>
+      </div>
+      <div class="app-card-body">
+        {% if session_ready %}
+        <div class="alert alert-success mb-3" role="alert">
+          <strong>{{ session_state.status }}</strong> · {{ session_state.message }}
+        </div>
+        {% else %}
+        <div class="alert alert-warning mb-3" role="alert">
+          <strong>{{ session_state.status }}</strong> · {{ session_state.message }}
+        </div>
+        <a class="btn btn-outline-primary" href="/session">Oturum aç</a>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
 
 {% if report %}
-<section class="section">
-  <div class="section-header">
+<div class="app-card mt-4">
+  <div class="app-card-header">
     <div>
-      <h2>Batch Sonuc Raporu</h2>
-      <p>{{ report.started_at }} - {{ report.ended_at }} arasinda {{ "%.3f"|format(report.duration_seconds) }} saniyede tamamlandi.</p>
+      <h2 class="h5 mb-1">İşlem sonucu</h2>
+      <p class="text-muted mb-0">{{ report.total_processed }} kayıt işlendi. Süre: {{ "%.1f"|format(report.duration_seconds) }} saniye.</p>
     </div>
     {% if report.aborted_due_to_session_loss %}
-    <div class="alert inline-error">Batch kritik session/navigation problemi nedeniyle durdu: {{ report.abort_reason }}</div>
+    <span class="badge text-bg-danger">Kritik abort</span>
     {% endif %}
   </div>
+  <div class="app-card-body">
+    {% if report.aborted_due_to_session_loss %}
+    <div class="alert alert-danger" role="alert">
+      İşlem kritik portal/oturum problemi nedeniyle durdu: {{ report.abort_reason }}
+    </div>
+    {% endif %}
 
-  <div class="summary-grid">
-    <div class="summary-item">
-      <span>Secili Uygun Kayit</span>
-      <strong>{{ report.total_selected }}</strong>
+    <div class="row g-3">
+      <div class="col-sm-6 col-lg-3">
+        <div class="metric-card">
+          <span>Seçili</span>
+          <strong>{{ report.total_selected }}</strong>
+        </div>
+      </div>
+      <div class="col-sm-6 col-lg-3">
+        <div class="metric-card metric-success">
+          <span>Başarılı</span>
+          <strong>{{ report.success_count }}</strong>
+        </div>
+      </div>
+      <div class="col-sm-6 col-lg-3">
+        <div class="metric-card metric-warning">
+          <span>Atlanan</span>
+          <strong>{{ report.skipped_count }}</strong>
+        </div>
+      </div>
+      <div class="col-sm-6 col-lg-3">
+        <div class="metric-card metric-danger">
+          <span>Hatalı</span>
+          <strong>{{ report.failed_count }}</strong>
+        </div>
+      </div>
     </div>
-    <div class="summary-item">
-      <span>Islenen</span>
-      <strong>{{ report.total_processed }}</strong>
-    </div>
-    <div class="summary-item">
-      <span>Basarili</span>
-      <strong>{{ report.success_count }}</strong>
-    </div>
-    <div class="summary-item">
-      <span>Skip</span>
-      <strong>{{ report.skipped_count }}</strong>
-    </div>
-    <div class="summary-item">
-      <span>Failed</span>
-      <strong>{{ report.failed_count }}</strong>
-    </div>
-    <div class="summary-item">
-      <span>Abort</span>
-      <strong>{{ report.aborted_count }}</strong>
+
+    <div class="progress mt-4" role="progressbar" aria-label="İşlem ilerleme durumu" aria-valuenow="{{ report.progress_percent }}" aria-valuemin="0" aria-valuemax="100">
+      <div class="progress-bar" style="width: {{ report.progress_percent }}%"></div>
     </div>
   </div>
+</div>
 
-  <div class="progress-bar" aria-label="Batch result progress">
-    <div style="width: {{ report.progress_percent }}%"></div>
+<div class="app-card mt-4">
+  <div class="app-card-header">
+    <div>
+      <h2 class="h5 mb-1">Kayıt detayları</h2>
+      <p class="text-muted mb-0">Hata mesajı ve ekran görüntüsü olan kayıtları buradan incele.</p>
+    </div>
+    <div class="btn-group report-filters" role="group" aria-label="Rapor filtreleri" data-report-filter-root>
+      <button type="button" class="btn btn-outline-secondary active" data-report-filter="all">Tüm detaylar</button>
+      <button type="button" class="btn btn-outline-secondary" data-report-filter="failed">Hatalılar</button>
+      <button type="button" class="btn btn-outline-secondary" data-report-filter="skipped">Atlananlar</button>
+      <button type="button" class="btn btn-outline-secondary" data-report-filter="screenshots">Screenshot olanlar</button>
+    </div>
   </div>
-
-  <h3>Status Dagilimi</h3>
-  <table>
-    <thead>
-      <tr>
-        <th>Status</th>
-        <th>Adet</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for status, count in report.results_by_status.items() %}
-      <tr>
-        <td><span class="status">{{ status }}</span></td>
-        <td>{{ count }}</td>
-      </tr>
-      {% else %}
-      <tr>
-        <td colspan="2" class="empty">Islenen kayit yok.</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-
-  <h3>Kayit Detaylari</h3>
-  <div class="filters report-filters" data-report-filter-root>
-    <button type="button" class="secondary-button active" data-report-filter="all">Tum Detaylar</button>
-    <button type="button" class="secondary-button" data-report-filter="failed">Failed</button>
-    <button type="button" class="secondary-button" data-report-filter="skipped">Skip</button>
-    <button type="button" class="secondary-button" data-report-filter="screenshots">Screenshot Olanlar</button>
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead>
+        <tr>
+          <th>Kişi</th>
+          <th>TC kimlik no</th>
+          <th>Son durum</th>
+          <th>Açıklama</th>
+          <th>Ekran görüntüsü</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for detail in report.details %}
+        {% set detail_status_class = "status-success" if detail.final_status == "SUCCESS_DRAFT_CREATED" else "status-danger" if detail.final_status.startswith("FAILED_") else "status-warning" if detail.final_status.startswith("SKIPPED_") else "status-muted" %}
+        <tr data-report-row data-status="{{ detail.final_status }}" data-screenshot="{{ '1' if detail.screenshot_path else '0' }}">
+          <td class="fw-semibold">{{ detail.full_name }}</td>
+          <td>{{ detail.tc_kimlik_no }}</td>
+          <td><span class="status-badge {{ detail_status_class }}">{{ detail.final_status }}</span></td>
+          <td>{{ detail.error_message or "Tamamlandı" }}</td>
+          <td class="text-break">{{ detail.screenshot_path or "-" }}</td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="5" class="text-center text-muted py-4">Detay yok.</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
   </div>
-  <table>
-    <thead>
-      <tr>
-        <th>ID</th>
-        <th>Ad Soyad</th>
-        <th>TCKN</th>
-        <th>Final Status</th>
-        <th>Hata</th>
-        <th>Screenshot</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for detail in report.details %}
-      <tr data-report-row data-status="{{ detail.final_status }}" data-screenshot="{{ '1' if detail.screenshot_path else '0' }}">
-        <td>{{ detail.record_id }}</td>
-        <td>{{ detail.full_name }}</td>
-        <td>{{ detail.tc_kimlik_no }}</td>
-        <td><span class="status">{{ detail.final_status }}</span></td>
-        <td>{{ detail.error_message or "-" }}</td>
-        <td>{{ detail.screenshot_path or "-" }}</td>
-      </tr>
-      {% else %}
-      <tr>
-        <td colspan="6" class="empty">Detay yok.</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-</section>
+</div>
 {% endif %}
 
-<section class="section">
-  <h2>Secili Kayitlar</h2>
-  <table>
-    <thead>
-      <tr>
-        <th>ID</th>
-        <th>Ad Soyad</th>
-        <th>TCKN</th>
-        <th>Tutar USD</th>
-        <th>Durum</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for record in preview.records %}
-      <tr>
-        <td>{{ record.id }}</td>
-        <td>{{ record.ad }} {{ record.soyad }}</td>
-        <td>{{ record.tc_kimlik_no }}</td>
-        <td>{{ "%.2f"|format(record.tutar_usd) }}</td>
-        <td><span class="status">{{ record.islem_durumu }}</span></td>
-      </tr>
-      {% else %}
-      <tr>
-        <td colspan="5" class="empty">Secili kayit bulunamadi.</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-</section>
+<div class="app-card mt-4">
+  <div class="app-card-header">
+    <div>
+      <h2 class="h5 mb-1">İşlenecek kayıtlar</h2>
+      <p class="text-muted mb-0">Bu liste aktif dönem içindeki seçili ve uygun kayıtları gösterir.</p>
+    </div>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead>
+        <tr>
+          <th>Ad</th>
+          <th>Soyad</th>
+          <th>TC kimlik no</th>
+          <th>Tutar</th>
+          <th>Durum</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for record in preview.records %}
+        {% set record_status_class = "status-success" if record.islem_durumu == "SUCCESS_DRAFT_CREATED" else "status-danger" if record.islem_durumu.startswith("FAILED_") else "status-info" if record.islem_durumu == "SELECTED" else "status-muted" %}
+        <tr>
+          <td>{{ record.ad }}</td>
+          <td>{{ record.soyad }}</td>
+          <td>{{ record.tc_kimlik_no }}</td>
+          <td>{{ "%.2f"|format(record.tutar_usd) }} USD</td>
+          <td><span class="status-badge {{ record_status_class }}">{{ record.islem_durumu }}</span></td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="5" class="text-center text-muted py-4">Seçili kayıt bulunamadı.</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
 
 <script>
   document.querySelectorAll("[data-report-filter]").forEach((button) => {

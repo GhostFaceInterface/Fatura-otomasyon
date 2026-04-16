@@ -20,6 +20,13 @@ from invoice_automation.app.db.models import (
 
 
 SELECTABLE_STATUSES = (InvoiceStatus.PENDING.value, InvoiceStatus.SELECTED.value)
+RECORD_SORT_COLUMNS = {
+    "id": "id",
+    "ad": "LOWER(ad)",
+    "soyad": "LOWER(soyad)",
+    "tc_kimlik_no": "tc_kimlik_no",
+    "tutar_usd": "tutar_usd",
+}
 
 
 class InvoiceRecordRepository:
@@ -169,6 +176,8 @@ class InvoiceRecordRepository:
         status: InvoiceStatus | str | None = None,
         batch_id: int | None = None,
         search: str | None = None,
+        sort_by: str = "id",
+        sort_dir: str = "desc",
     ) -> list[InvoiceRecord]:
         """List records, optionally filtering by status, batch and text search."""
 
@@ -181,23 +190,31 @@ class InvoiceRecordRepository:
             filters.append("batch_id = ?")
             values.append(batch_id)
         normalized_search = (search or "").strip()
-        if normalized_search:
-            filters.append("(ad LIKE ? OR soyad LIKE ? OR tc_kimlik_no LIKE ?)")
-            search_value = f"%{normalized_search}%"
-            values.extend([search_value, search_value, search_value])
 
         where_clause = f"WHERE {' AND '.join(filters)}" if filters else ""
+        order_clause = _record_order_clause(sort_by, sort_dir)
         with self._connect() as connection:
             rows = connection.execute(
                 f"""
                 SELECT *
                 FROM invoice_records
                 {where_clause}
-                ORDER BY id DESC
+                {order_clause}
                 """,
                 values,
             ).fetchall()
-        return [InvoiceRecord.from_row(row) for row in rows]
+        records = [InvoiceRecord.from_row(row) for row in rows]
+        if not normalized_search:
+            return records
+
+        search_value = normalized_search.casefold()
+        return [
+            record
+            for record in records
+            if search_value in record.ad.casefold()
+            or search_value in record.soyad.casefold()
+            or search_value in record.tc_kimlik_no
+        ]
 
     def get(self, record_id: int) -> InvoiceRecord | None:
         """Return a single record by id."""
@@ -407,3 +424,14 @@ class InvoiceRecordRepository:
         with self._connect() as connection:
             row = connection.execute("SELECT COUNT(*) AS total FROM invoice_records").fetchone()
         return int(row["total"])
+
+
+def _record_order_clause(sort_by: str, sort_dir: str) -> str:
+    sort_key = sort_by if sort_by in RECORD_SORT_COLUMNS else "id"
+    direction = "ASC" if sort_dir.lower() == "asc" else "DESC"
+    sort_expression = RECORD_SORT_COLUMNS[sort_key]
+
+    if sort_key == "id":
+        return f"ORDER BY {sort_expression} {direction}"
+
+    return f"ORDER BY {sort_expression} {direction}, id DESC"

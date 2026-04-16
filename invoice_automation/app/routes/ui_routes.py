@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 import logging
 from pathlib import Path
 import shutil
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, File, Form, Query, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -26,6 +27,15 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["ui"])
 templates = Jinja2Templates(directory=str(ROOT_DIR / "invoice_automation" / "app" / "templates"))
+
+RECORD_SORT_OPTIONS = (
+    ("id", "Kayıt sırası"),
+    ("ad", "Ad"),
+    ("soyad", "Soyad"),
+    ("tc_kimlik_no", "TC kimlik no"),
+    ("tutar_usd", "Tutar"),
+)
+RECORD_SORT_KEYS = {key for key, _label in RECORD_SORT_OPTIONS}
 
 
 @router.get("/", response_class=HTMLResponse)
@@ -151,21 +161,33 @@ def records(
     request: Request,
     status: str | None = Query(default=None),
     q: str | None = Query(default=None),
+    sort_by: str = Query(default="id"),
+    sort_dir: str = Query(default="desc"),
 ) -> HTMLResponse:
     """Render invoice records as a table."""
 
     status = status or None
     q = q or None
+    sort_by = sort_by if sort_by in RECORD_SORT_KEYS else "id"
+    sort_dir = "asc" if sort_dir == "asc" else "desc"
     repository = InvoiceRecordRepository()
     active_batch = _active_batch(repository, request.query_params.get("batch_id"))
     active_batch_id = active_batch.id if active_batch else None
     invoice_records = (
-        repository.list_all(status=status, batch_id=active_batch_id, search=q)
+        repository.list_all(
+            status=status,
+            batch_id=active_batch_id,
+            search=q,
+            sort_by=sort_by,
+            sort_dir=sort_dir,
+        )
         if active_batch_id is not None
         else []
     )
     statuses = [status_value.value for status_value in InvoiceStatus]
-    selected_count = len(repository.list_selected(batch_id=active_batch_id))
+    selected_record_ids = [record.id for record in repository.list_selected(batch_id=active_batch_id)]
+    visible_record_ids = [record.id for record in invoice_records]
+    selected_count = len(selected_record_ids)
     eligible_count = len(
         [
             record
@@ -182,6 +204,11 @@ def records(
             "active_batch": active_batch,
             "selected_status": status,
             "search_query": q or "",
+            "selected_record_ids": selected_record_ids,
+            "visible_record_ids": visible_record_ids,
+            "sort_options": RECORD_SORT_OPTIONS,
+            "selected_sort_by": sort_by,
+            "selected_sort_dir": sort_dir,
             "statuses": statuses,
             "selected_count": selected_count,
             "eligible_count": eligible_count,
@@ -194,12 +221,29 @@ def records(
 def save_selection(
     batch_id: int = Form(...),
     selected_record_ids: list[int] | None = Form(default=None),
+    status: str = Form(default=""),
+    q: str = Form(default=""),
+    sort_by: str = Form(default="id"),
+    sort_dir: str = Form(default="desc"),
 ) -> RedirectResponse:
     """Persist selected records from the records screen."""
 
     selected_records = SelectionService().save_selection(selected_record_ids or [], batch_id=batch_id)
+    query = {
+        "batch_id": batch_id,
+        "selection_saved": "1",
+        "selected_count": len(selected_records),
+    }
+    if status:
+        query["status"] = status
+    if q:
+        query["q"] = q
+    if sort_by:
+        query["sort_by"] = sort_by
+    if sort_dir:
+        query["sort_dir"] = sort_dir
     return RedirectResponse(
-        url=f"/records?batch_id={batch_id}&selection_saved=1&selected_count={len(selected_records)}",
+        url=f"/records?{urlencode(query)}",
         status_code=303,
     )
 

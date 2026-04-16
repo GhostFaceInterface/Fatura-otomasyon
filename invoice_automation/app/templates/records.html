@@ -28,15 +28,15 @@
       <div class="row g-2">
         <div class="col-4">
           <div class="metric-label">Görünen</div>
-          <div class="fw-bold">{{ records|length }}</div>
+          <div id="visible-record-count" class="fw-bold">{{ records|length }}</div>
         </div>
         <div class="col-4">
           <div class="metric-label">Uygun</div>
-          <div class="fw-bold">{{ eligible_count }}</div>
+          <div id="eligible-record-count" class="fw-bold">{{ eligible_count }}</div>
         </div>
         <div class="col-4">
           <div class="metric-label">Seçili</div>
-          <div class="fw-bold">{{ selected_count }}</div>
+          <div id="selected-record-count" class="fw-bold">{{ selected_count }}</div>
         </div>
       </div>
     </div>
@@ -55,13 +55,13 @@
     <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
       <div>
         <h2 class="h5 mb-1">Filtreler</h2>
-        <p class="small-muted mb-0">Dönem, durum veya kişi bilgisine göre listeyi daralt.</p>
+        <p class="small-muted mb-0">Dönem, durum, kişi bilgisi veya sıralama değiştiğinde liste otomatik yenilenir.</p>
       </div>
     </div>
   </div>
   <div class="app-card-body">
-    <form action="/records" method="get" class="row g-3 align-items-end">
-      <div class="col-lg-4">
+    <form action="/records" method="get" class="row g-3 align-items-end" data-auto-filter-form>
+      <div class="col-lg-3">
         <label for="batch_id" class="form-label">Fatura dönemi</label>
         <select id="batch_id" name="batch_id" class="form-select" required>
           {% for batch in batches %}
@@ -69,7 +69,7 @@
           {% endfor %}
         </select>
       </div>
-      <div class="col-lg-3">
+      <div class="col-lg-2">
         <label for="status" class="form-label">Durum</label>
         <select id="status" name="status" class="form-select">
           <option value="">Tüm kayıtlar</option>
@@ -80,10 +80,22 @@
       </div>
       <div class="col-lg-3">
         <label for="q" class="form-label">Arama</label>
-        <input id="q" type="text" name="q" class="form-control" value="{{ search_query }}" placeholder="Ad, soyad veya TCKN">
+        <input id="q" type="search" name="q" class="form-control" value="{{ search_query }}" placeholder="Ad, soyad veya TCKN" autocomplete="off">
       </div>
-      <div class="col-lg-2 d-grid">
-        <button type="submit" class="btn btn-outline-primary">Filtrele</button>
+      <div class="col-lg-2">
+        <label for="sort_by" class="form-label">Sıralama</label>
+        <select id="sort_by" name="sort_by" class="form-select">
+          {% for sort_key, sort_label in sort_options %}
+          <option value="{{ sort_key }}" {% if selected_sort_by == sort_key %}selected{% endif %}>{{ sort_label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-lg-2">
+        <label for="sort_dir" class="form-label">Yön</label>
+        <select id="sort_dir" name="sort_dir" class="form-select">
+          <option value="asc" {% if selected_sort_dir == "asc" %}selected{% endif %}>Artan</option>
+          <option value="desc" {% if selected_sort_dir == "desc" %}selected{% endif %}>Azalan</option>
+        </select>
       </div>
     </form>
   </div>
@@ -93,6 +105,17 @@
   {% if active_batch %}
   <input type="hidden" name="batch_id" value="{{ active_batch.id }}">
   {% endif %}
+  <input type="hidden" name="status" value="{{ selected_status or '' }}">
+  <input type="hidden" name="q" value="{{ search_query }}">
+  <input type="hidden" name="sort_by" value="{{ selected_sort_by }}">
+  <input type="hidden" name="sort_dir" value="{{ selected_sort_dir }}">
+  <div id="preserved-selected-records">
+    {% for selected_id in selected_record_ids %}
+    {% if selected_id not in visible_record_ids %}
+    <input type="hidden" name="selected_record_ids" value="{{ selected_id }}">
+    {% endif %}
+    {% endfor %}
+  </div>
 
   <div class="app-card">
     <div class="app-card-header">
@@ -122,7 +145,7 @@
             <th>Durum</th>
           </tr>
         </thead>
-        <tbody>
+        <tbody id="records-table-body">
           {% for record in records %}
           <tr>
             <td>
@@ -155,14 +178,240 @@
   </div>
 </form>
 
+<div id="selected-record-state" data-selected-record-ids="{{ selected_record_ids|join(',') }}" hidden></div>
+
 <script>
-  const selectAll = document.getElementById("select-all-records");
-  if (selectAll) {
-    selectAll.addEventListener("change", () => {
-      document.querySelectorAll(".record-select-checkbox").forEach((checkbox) => {
-        checkbox.checked = selectAll.checked;
+  (() => {
+    const selectableStatuses = new Set(["PENDING", "SELECTED"]);
+    const selectedState = document.getElementById("selected-record-state");
+    const selectedRecordIds = new Set(
+      (selectedState?.dataset.selectedRecordIds || "")
+        .split(",")
+        .map((value) => value.trim())
+        .filter(Boolean)
+    );
+    const filterForm = document.querySelector("[data-auto-filter-form]");
+    const selectionForm = document.querySelector('form[action="/records/selection"]');
+    const tableBody = document.getElementById("records-table-body");
+    const preservedSelectedRecords = document.getElementById("preserved-selected-records");
+    const visibleRecordCount = document.getElementById("visible-record-count");
+    const eligibleRecordCount = document.getElementById("eligible-record-count");
+    const selectedRecordCount = document.getElementById("selected-record-count");
+    const selectAll = document.getElementById("select-all-records");
+    let recordsController;
+
+    const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, (character) => ({
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#039;",
+    }[character]));
+
+    const statusClass = (status) => {
+      if (status === "SUCCESS_DRAFT_CREATED") {
+        return "status-success";
+      }
+      if (status.startsWith("FAILED_")) {
+        return "status-failed";
+      }
+      if (status === "SELECTED") {
+        return "status-selected";
+      }
+      return "status-neutral";
+    };
+
+    const renderRecordRow = (record) => {
+      const recordId = String(record.id);
+      const isSelectable = selectableStatuses.has(record.islem_durumu);
+      const isChecked = selectedRecordIds.has(recordId);
+      const checkbox = isSelectable
+        ? `<input class="record-select-checkbox" type="checkbox" name="selected_record_ids" value="${escapeHtml(recordId)}" ${isChecked ? "checked" : ""}>`
+        : `<input type="checkbox" ${isChecked ? "checked" : ""} disabled>`;
+
+      return `
+        <tr>
+          <td>${checkbox}</td>
+          <td>${escapeHtml(record.ad)}</td>
+          <td>${escapeHtml(record.soyad)}</td>
+          <td>${escapeHtml(record.tc_kimlik_no)}</td>
+          <td>${Number(record.tutar_usd).toFixed(2)} USD</td>
+          <td>
+            <span class="status-badge ${statusClass(record.islem_durumu)}">
+              ${escapeHtml(record.islem_durumu)}
+            </span>
+          </td>
+        </tr>
+      `;
+    };
+
+    const updatePreservedSelectionInputs = () => {
+      if (!preservedSelectedRecords) {
+        return;
+      }
+      preservedSelectedRecords.innerHTML = "";
+      selectedRecordIds.forEach((recordId) => {
+        const input = document.createElement("input");
+        input.type = "hidden";
+        input.name = "selected_record_ids";
+        input.value = recordId;
+        preservedSelectedRecords.appendChild(input);
       });
+    };
+
+    const updateSelectionCount = () => {
+      if (selectedRecordCount) {
+        selectedRecordCount.textContent = String(selectedRecordIds.size);
+      }
+    };
+
+    const updateSelectAllState = () => {
+      if (!selectAll) {
+        return;
+      }
+      const checkboxes = Array.from(document.querySelectorAll(".record-select-checkbox"));
+      selectAll.checked = checkboxes.length > 0 && checkboxes.every((checkbox) => checkbox.checked);
+    };
+
+    const bindRecordCheckboxes = () => {
+      document.querySelectorAll(".record-select-checkbox").forEach((checkbox) => {
+        checkbox.addEventListener("change", () => {
+          if (checkbox.checked) {
+            selectedRecordIds.add(checkbox.value);
+          } else {
+            selectedRecordIds.delete(checkbox.value);
+          }
+          updatePreservedSelectionInputs();
+          updateSelectionCount();
+          updateSelectAllState();
+        });
+      });
+    };
+
+    const renderRecords = (records) => {
+      if (!tableBody) {
+        return;
+      }
+      if (records.length === 0) {
+        tableBody.innerHTML = `
+          <tr>
+            <td colspan="6">
+              <div class="empty-state">Bu filtrelerle kayıt bulunamadı.</div>
+            </td>
+          </tr>
+        `;
+      } else {
+        tableBody.innerHTML = records.map(renderRecordRow).join("");
+      }
+
+      if (visibleRecordCount) {
+        visibleRecordCount.textContent = String(records.length);
+      }
+      if (eligibleRecordCount) {
+        eligibleRecordCount.textContent = String(
+          records.filter((record) => selectableStatuses.has(record.islem_durumu)).length
+        );
+      }
+
+      bindRecordCheckboxes();
+      updateSelectAllState();
+    };
+
+    const syncSelectionHiddenFields = () => {
+      if (!filterForm || !selectionForm) {
+        return;
+      }
+      const formData = new FormData(filterForm);
+      ["status", "q", "sort_by", "sort_dir"].forEach((fieldName) => {
+        const input = selectionForm.querySelector(`input[name="${fieldName}"]`);
+        if (input) {
+          input.value = formData.get(fieldName) || "";
+        }
+      });
+    };
+
+    const filterParams = () => new URLSearchParams(new FormData(filterForm));
+
+    const updateRecordsUrl = () => {
+      const params = filterParams();
+      window.history.replaceState({}, "", `${window.location.pathname}?${params.toString()}`);
+    };
+
+    const fetchRecords = async () => {
+      if (!filterForm) {
+        return;
+      }
+      recordsController?.abort();
+      recordsController = new AbortController();
+      const params = filterParams();
+      syncSelectionHiddenFields();
+      updateRecordsUrl();
+
+      try {
+        const response = await fetch(`/api/records?${params.toString()}`, {
+          signal: recordsController.signal,
+          headers: {"Accept": "application/json"},
+        });
+        if (!response.ok) {
+          filterForm.submit();
+          return;
+        }
+        const data = await response.json();
+        renderRecords(data.records || []);
+      } catch (error) {
+        if (error.name !== "AbortError") {
+          filterForm.submit();
+        }
+      }
+    };
+
+    if (filterForm) {
+      let searchTimeoutId;
+      const batchSelect = filterForm.querySelector("#batch_id");
+      const liveControls = filterForm.querySelectorAll("#status, #sort_by, #sort_dir");
+
+      batchSelect?.addEventListener("change", () => {
+        filterForm.submit();
+      });
+
+      liveControls.forEach((select) => {
+        select.addEventListener("change", fetchRecords);
+      });
+
+      const searchInput = filterForm.querySelector("#q");
+      if (searchInput) {
+        searchInput.addEventListener("input", () => {
+          window.clearTimeout(searchTimeoutId);
+          searchTimeoutId = window.setTimeout(fetchRecords, 150);
+        });
+      }
+    }
+
+    if (selectAll) {
+      selectAll.addEventListener("change", () => {
+        document.querySelectorAll(".record-select-checkbox").forEach((checkbox) => {
+          checkbox.checked = selectAll.checked;
+          if (selectAll.checked) {
+            selectedRecordIds.add(checkbox.value);
+          } else {
+            selectedRecordIds.delete(checkbox.value);
+          }
+        });
+        updatePreservedSelectionInputs();
+        updateSelectionCount();
+        updateSelectAllState();
+      });
+    }
+
+    selectionForm?.addEventListener("submit", () => {
+      syncSelectionHiddenFields();
+      updatePreservedSelectionInputs();
     });
-  }
+
+    bindRecordCheckboxes();
+    updatePreservedSelectionInputs();
+    updateSelectionCount();
+    updateSelectAllState();
+  })();
 </script>
 {% endblock %}

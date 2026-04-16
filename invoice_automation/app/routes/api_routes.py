@@ -25,11 +25,19 @@ def list_records(
     status: str | None = Query(default=None),
     batch_id: int | None = Query(default=None),
     q: str | None = Query(default=None),
+    sort_by: str = Query(default="id"),
+    sort_dir: str = Query(default="desc"),
 ) -> dict[str, object]:
     """Return invoice records as JSON."""
 
     repository = InvoiceRecordRepository()
-    records = repository.list_all(status=status, batch_id=batch_id, search=q)
+    records = repository.list_all(
+        status=status,
+        batch_id=batch_id,
+        search=q,
+        sort_by=sort_by,
+        sort_dir=sort_dir,
+    )
     return {
         "count": len(records),
         "records": [record.to_dict() for record in records],

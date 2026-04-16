@@ -81,3 +81,12 @@ Guncel frontend redesign:
 - Records ekrani aktif fatura donemi, secili/gorunen/uygun metrikleri, filtre karti, aksiyon grubu ve Bootstrap tabloyla yeniden tasarlandi.
 - Import, kolon mapping, session, batch ve draft POC ekranlari ayni Bootstrap kart/form/alert/table diliyle tutarli hale getirildi.
 - Bootstrap CDN kullanilir; proje offline zorunlu hale gelirse Bootstrap asset'leri lokal olarak vendor edilebilir.
+
+Kayit listesi UX guncellemesi:
+
+- Records ekraninda filtre butonu kaldirildi; arama input'u yazildikca otomatik GET yenilemesiyle ad, soyad veya TCKN filtresini uygular.
+- Dönem, durum, siralama alani ve siralama yonu degisiklikleri listeyi otomatik yeniler.
+- Kayit listesi ad, soyad, TC kimlik no, tutar veya kayit sirasina gore artan/azalan siralanabilir.
+- Secimi kaydet aksiyonu mevcut filtre ve siralama query parametrelerini koruyarak kayit ekranina doner.
+- Canli arama `/api/records` ile tabloyu yerinde gunceller; secili kayit ID'leri filtre/siralama degisikliklerinde client state olarak korunur.
+- Ad/soyad aramasi Python `casefold()` ile yapilir, boylece Turkce buyuk/kucuk harf eslesmesi SQLite `LIKE` davranisina bagli kalmaz.

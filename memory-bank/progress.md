@@ -210,3 +210,17 @@ Tamamlandi:
 - Form, tablo, status rozeti, session state, metric card ve rapor filtreleri `static/css/app.css` icinde merkezi stillenir.
 - Bootstrap CDN kullanildigi icin tam offline kullanim istenirse ileride Bootstrap asset'leri lokal vendor edilebilir.
 - Jinja template parse kontrolu ve tum test paketi 68 test ile basarili calisti.
+
+## Kayit Listesi Filtreleme ve Siralama
+
+Tamamlandi:
+
+- Records ekranindaki `Filtrele` butonu kaldirildi.
+- Arama alani ad, soyad veya TCKN icin yazildikca otomatik filtreleme yapacak sekilde guncellendi.
+- Dönem, durum, siralama alani ve siralama yonu degisince liste otomatik yenilenir.
+- Kayit listesi kayit sirasi, ad, soyad, TC kimlik no veya tutara gore artan/azalan siralanabilir.
+- `/api/records` ve repository listeleme metodu ayni kontrollu siralama parametrelerini destekler.
+- Secim kaydedildikten sonra mevcut filtre ve siralama baglami korunur.
+- Canli arama tabloyu AJAX ile yerinde gunceller; filtre/siralama degisikliklerinde secili kayit ID'leri korunur.
+- Ad/soyad aramasi `casefold()` ile Turkce buyuk/kucuk harf duyarliligindan etkilenmeyecek sekilde yapilir.
+- Repository siralama ve Turkce arama testleri eklendi; tum test paketi 70 test ile basarili calisti.

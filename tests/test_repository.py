@@ -107,6 +107,67 @@ def test_repository_searches_records_inside_batch(tmp_path: Path) -> None:
     assert records[0].ad == "Ayse"
 
 
+def test_repository_search_handles_turkish_case(tmp_path: Path) -> None:
+    repository = InvoiceRecordRepository(tmp_path / "test.sqlite3")
+    batch = repository.create_import_batch(
+        ImportBatchCreate(name="Nisan", source_file_name="nisan.xlsx", sheet_name="Sayfa1")
+    )
+    repository.create(
+        InvoiceRecordCreate(
+            batch_id=batch.id,
+            ad="ŞÜKRAN",
+            soyad="ARSLAN",
+            tc_kimlik_no="12345678901",
+            tutar_usd=1500.0,
+        )
+    )
+
+    records = repository.list_all(batch_id=batch.id, search="şü")
+
+    assert len(records) == 1
+    assert records[0].ad == "ŞÜKRAN"
+
+
+def test_repository_sorts_records_by_allowed_fields(tmp_path: Path) -> None:
+    repository = InvoiceRecordRepository(tmp_path / "test.sqlite3")
+    repository.create(
+        InvoiceRecordCreate(
+            ad="Zeynep",
+            soyad="Arslan",
+            tc_kimlik_no="30000000000",
+            tutar_usd=900.0,
+        )
+    )
+    repository.create(
+        InvoiceRecordCreate(
+            ad="Ali",
+            soyad="Yilmaz",
+            tc_kimlik_no="10000000000",
+            tutar_usd=1500.0,
+        )
+    )
+    repository.create(
+        InvoiceRecordCreate(
+            ad="Mehmet",
+            soyad="Demir",
+            tc_kimlik_no="20000000000",
+            tutar_usd=1200.0,
+        )
+    )
+
+    by_name = repository.list_all(sort_by="ad", sort_dir="asc")
+    by_amount = repository.list_all(sort_by="tutar_usd", sort_dir="desc")
+    by_tckn = repository.list_all(sort_by="tc_kimlik_no", sort_dir="asc")
+
+    assert [record.ad for record in by_name] == ["Ali", "Mehmet", "Zeynep"]
+    assert [record.tutar_usd for record in by_amount] == [1500.0, 1200.0, 900.0]
+    assert [record.tc_kimlik_no for record in by_tckn] == [
+        "10000000000",
+        "20000000000",
+        "30000000000",
+    ]
+
+
 def test_repository_updates_selection_statuses(tmp_path: Path) -> None:
     repository = InvoiceRecordRepository(tmp_path / "test.sqlite3")
     first = repository.create(

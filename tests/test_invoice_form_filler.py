@@ -125,3 +125,28 @@ def test_invoice_form_filler_raises_when_turmob_name_does_not_match() -> None:
 
     with pytest.raises(NameMismatchError):
         InvoiceFormFiller(timeout_ms=30_000).fill_form(page, form_data)
+
+
+def test_invoice_form_filler_skips_turmob_when_tax_scheme_is_prefilled() -> None:
+    page = FakePage()
+    page.values_by_selector["#txtTaxSchemeName"] = "ŞİRİNYER VERGİ DAİRESİ MÜD."
+    form_data = InvoiceFormData(
+        record_id=2,
+        ad="Ali",
+        soyad="Yilmaz",
+        tc_kimlik_no="12345678901",
+        tutar_usd=1000.0,
+        mal_hizmet_adi="YURT DIŞI KONAKLAMA BEDELİ",
+        il="**",
+        ilce="**",
+        para_birimi="USD",
+        kdv_orani="0",
+        istisna_target_text="302-11/1-a Hizmet ihracatı",
+        istisna_option_value=None,
+    )
+
+    InvoiceFormFiller(timeout_ms=30_000).fill_form(page, form_data)
+
+    assert ("input_value", "#txtTaxSchemeName", 30_000) in page.actions
+    assert ("click_text", "Türmob Müsteri Sorgula", 30_000) not in page.actions
+    assert ("fill", "#MalAdi", "YURT DIŞI KONAKLAMA BEDELİ") in page.actions

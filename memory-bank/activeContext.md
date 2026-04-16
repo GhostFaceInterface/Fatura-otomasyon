@@ -52,3 +52,9 @@ Son bug fix:
 - `$1.450`, `1.450`, `$850`, `$1,450` gibi binlik ayracli degerler deterministik olarak float tutara normalize edilir.
 - `$1450.75` gibi decimal nokta iceren degerler decimal olarak korunur.
 - Parse edilemeyen veya bos tutarlar satir bazli import hatasi olarak raporlanir ve loglanir.
+
+Canli pilot bulgusu:
+
+- Portal KDV 0 secilince "Fatura Tipi ISTISNA olarak degistirilmistir" bilgi mesajini gosterir; bu normaldir ve fail sayilmamalidir.
+- TCKN girildikten sonra `#txtTaxSchemeName` dolu gelirse kisi daha once sorgulanmis kabul edilir, kontor harcamamak icin Turmob butonuna tekrar basilmaz.
+- Taslak kaydet butonu sonrasi portal yuklenmesi icin 2 saniyelik kontrollu bekleme eklendi.

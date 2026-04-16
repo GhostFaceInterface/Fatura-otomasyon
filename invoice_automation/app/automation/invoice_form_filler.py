@@ -92,14 +92,22 @@ class InvoiceFormFiller:
             form_data.tc_kimlik_no,
             "TCKN alani doldurulamadi.",
         )
-        self._click_text(
-            page,
-            self.selectors.turmob_search_text,
-            "Turmob musteri sorgulama tetiklenemedi.",
-        )
-        self._wait_after_action(page, 1_000)
-        if after_turmob_lookup is not None:
-            after_turmob_lookup()
+        should_lookup_turmob = self._should_lookup_turmob(page, form_data)
+        if should_lookup_turmob:
+            self._click_text(
+                page,
+                self.selectors.turmob_search_text,
+                "Turmob musteri sorgulama tetiklenemedi.",
+            )
+            self._wait_after_action(page, 1_000)
+            if after_turmob_lookup is not None:
+                after_turmob_lookup()
+        else:
+            logger.info(
+                "Vergi dairesi dolu geldigi icin Turmob sorgusu atlandi | record_id=%s tc=%s",
+                form_data.record_id,
+                form_data.tc_kimlik_no,
+            )
         self._verify_turmob_customer_name(page, form_data)
 
         self._fill_locator(page, self.selectors.city_selector, form_data.il, "Il alani doldurulamadi.")
@@ -151,6 +159,27 @@ class InvoiceFormFiller:
             return str(locator.input_value(timeout=self.timeout_ms)).strip()
         except Exception as exc:
             raise ElementNotFoundError(error_message) from exc
+
+    def _try_read_locator_value(self, page: Any, selector: str) -> str:
+        try:
+            return self._read_locator_value(page, selector, f"{selector} okunamadi.")
+        except Exception:
+            logger.debug("Optional locator value okunamadi | selector=%s", selector, exc_info=True)
+            return ""
+
+    def _should_lookup_turmob(self, page: Any, form_data: InvoiceFormData) -> bool:
+        self._wait_after_action(page, settings.tax_scheme_prefill_wait_ms)
+        tax_scheme_name = self._try_read_locator_value(page, self.selectors.tax_scheme_name_selector)
+        has_prefilled_tax_scheme = bool(tax_scheme_name.strip())
+        logger.info(
+            "TCKN sonrasi vergi dairesi kontrolu | record_id=%s tc=%s tax_scheme_filled=%s tax_scheme=%s wait_ms=%s",
+            form_data.record_id,
+            form_data.tc_kimlik_no,
+            has_prefilled_tax_scheme,
+            tax_scheme_name or "-",
+            settings.tax_scheme_prefill_wait_ms,
+        )
+        return not has_prefilled_tax_scheme
 
     def _verify_turmob_customer_name(self, page: Any, form_data: InvoiceFormData) -> None:
         first_name = self._read_non_empty_locator_value(

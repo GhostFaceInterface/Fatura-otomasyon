@@ -12,6 +12,8 @@
 
 Uygulama `python run.py` ile `127.0.0.1:8000` adresinde calisir. Runtime verileri `data/` altinda tutulur.
 
+Playwright Python paketi `requirements.txt` ile kurulur, ancak browser binary'leri ayrica indirilmelidir. Ilk kurulumda veya cache temizlendiyse `venv/bin/python -m playwright install chromium` calistirilmelidir.
+
 Faz 6 ve son faz icin ek runtime ayarlari:
 
 - `NAVIGATION_RETRY_COUNT`: Basari/hata sonrasi sonraki kayit icin temiz e-Arsiv olustur sayfasina donus retry sayisi. Varsayilan `2`.
@@ -19,6 +21,8 @@ Faz 6 ve son faz icin ek runtime ayarlari:
 - `REDIRECT_WAIT_TIMEOUT_MS`: Taslak kaydetme sonrasi `/EArchive/Drafts` redirect bekleme suresi. Varsayilan `30000`.
 - `TURMOB_LOOKUP_RETRY_COUNT`: Turmob sonrasi ad/soyad alanlarini okuma retry sayisi. Varsayilan `2`.
 - `RETRY_BACKOFF_BASE_MS`: Kisa artan bekleme icin baz sure. Varsayilan `500`.
+- `TAX_SCHEME_PREFILL_WAIT_MS`: TCKN girildikten sonra vergi dairesi alaninin otomatik dolmasini bekleme suresi. Varsayilan `2000`.
+- `DRAFT_SAVE_WAIT_MS`: Taslak Kaydet tiklandiktan sonra portal yuklenmesini bekleme suresi. Varsayilan `2000`.
 
 Faz 7 oncesi kritik tamamlamalar:
 

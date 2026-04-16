@@ -42,6 +42,14 @@ class FakeEmptyLocator:
         return []
 
 
+class FakeInlineLocator:
+    def __init__(self, messages: list[str]) -> None:
+        self.messages = messages
+
+    def all_text_contents(self) -> list[str]:
+        return self.messages
+
+
 class FakeDialogPage:
     def __init__(self, title: str, message: str, screenshot_dir: Path) -> None:
         self.dialog_title = title
@@ -62,6 +70,17 @@ class FakeDialogPage:
 
     def wait_for_timeout(self, timeout_ms: int) -> None:
         self.actions.append(("wait_for_timeout", timeout_ms))
+
+
+class FakeInlinePage:
+    def __init__(self, messages: list[str]) -> None:
+        self.messages = messages
+
+    def get_by_role(self, role: str, name: str) -> FakeRoleLocator:
+        raise RuntimeError(f"{role}:{name} not visible")
+
+    def locator(self, selector: str) -> FakeInlineLocator:
+        return FakeInlineLocator(self.messages)
 
 
 def test_detector_maps_turmob_service_dialog(tmp_path: Path) -> None:
@@ -109,3 +128,21 @@ def test_detector_maps_efatura_dialog(tmp_path: Path) -> None:
         PortalErrorDetector().raise_if_portal_error(page, stage="save_draft", record_id=9)
 
     assert page.ok_clicked is True
+
+
+def test_detector_ignores_harmless_istisna_info_dialog(tmp_path: Path) -> None:
+    page = FakeDialogPage(
+        "Bilgi",
+        "Fatura Tipi ISTISNA olarak değiştirilmiştir.",
+        tmp_path,
+    )
+
+    PortalErrorDetector().raise_if_portal_error(page, stage="form_fill", record_id=12)
+
+    assert page.ok_clicked is True
+
+
+def test_detector_ignores_harmless_istisna_inline_message() -> None:
+    page = FakeInlinePage(["Fatura Tipi İSTİSNA olarak değiştirilmiştir."])
+
+    PortalErrorDetector().raise_if_portal_error(page, stage="form_fill", record_id=13)

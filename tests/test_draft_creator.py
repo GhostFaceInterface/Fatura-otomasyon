@@ -70,6 +70,9 @@ class FakeDraftPage:
     def get_by_text(self, text: str) -> FakeVisibleText:
         return FakeVisibleText(self, text)
 
+    def wait_for_timeout(self, timeout_ms: int) -> None:
+        self.actions.append(("wait_for_timeout", timeout_ms))
+
 
 def _record() -> InvoiceRecord:
     return InvoiceRecord(

@@ -19,6 +19,7 @@ class PortalSelectors:
     document_currency_selector: str = "#DocumentCurrencyCode"
     getir_text: str = "Getir"
     identification_selector: str = "#txtIdentificationID"
+    tax_scheme_name_selector: str = "#txtTaxSchemeName"
     turmob_search_text: str = "Türmob Müsteri Sorgula"
     person_first_name_selector: str = "#txtPerson_FirstName"
     person_family_name_selector: str = "#txtPerson_FamilyName"

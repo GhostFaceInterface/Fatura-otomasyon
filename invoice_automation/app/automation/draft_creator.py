@@ -71,6 +71,7 @@ class DraftCreator:
         self.error_detector.raise_if_portal_error(page, stage="form_fill", record_id=record.id)
 
         self._click_save_draft(page)
+        self._wait_after_save(page)
         self.error_detector.raise_if_portal_error(page, stage="save_draft", record_id=record.id)
         self._wait_for_success_redirect(page, record.id)
 
@@ -90,6 +91,13 @@ class DraftCreator:
             raise
         except Exception as exc:
             raise PortalTimeoutError(f"Taslak kaydet butonuna basilamadi: {exc}") from exc
+
+    def _wait_after_save(self, page: Any) -> None:
+        try:
+            page.wait_for_timeout(settings.draft_save_wait_ms)
+            logger.info("Taslak kaydet sonrasi bekleme tamamlandi | wait_ms=%s", settings.draft_save_wait_ms)
+        except Exception:
+            logger.debug("Taslak kaydet sonrasi bekleme basarisiz", exc_info=True)
 
     def _wait_for_success_redirect(self, page: Any, record_id: int) -> None:
         try:

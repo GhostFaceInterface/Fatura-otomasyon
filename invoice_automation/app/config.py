@@ -76,6 +76,8 @@ class Settings:
     redirect_wait_timeout_ms: int = int(os.getenv("REDIRECT_WAIT_TIMEOUT_MS", str(_playwright_timeout_ms())))
     turmob_lookup_retry_count: int = int(os.getenv("TURMOB_LOOKUP_RETRY_COUNT", "2"))
     retry_backoff_base_ms: int = int(os.getenv("RETRY_BACKOFF_BASE_MS", "500"))
+    tax_scheme_prefill_wait_ms: int = int(os.getenv("TAX_SCHEME_PREFILL_WAIT_MS", "2000"))
+    draft_save_wait_ms: int = int(os.getenv("DRAFT_SAVE_WAIT_MS", "2000"))
 
     mal_hizmet_adi: str = os.getenv("MAL_HIZMET_ADI", "YURT DIŞI KONAKLAMA BEDELİ")
     miktar: str = os.getenv("MIKTAR", "1")

@@ -31,6 +31,10 @@ PORTAL_DIALOG_OK_BUTTON_NAME = "OK"
 TURMOB_SERVICE_ERROR_PATTERN = "Servis hatası oluştu"
 INVALID_TCKN_ERROR_PATTERN = "geçerli bir VKN/TCKN değeri değildir"
 EFATURA_MUKELLEFI_ERROR_PATTERN = "e-Fatura Mükellefine e-Arşiv Fatura Kesilemez"
+HARMLESS_PORTAL_INFO_PATTERNS = (
+    "Fatura Tipi ISTISNA olarak değiştirilmiştir",
+    "Fatura Tipi İSTİSNA olarak değiştirilmiştir",
+)
 EARCHIVE_DRAFTS_PATH = "/EArchive/Drafts"
 EARCHIVE_DRAFTS_SUCCESS_TEXTS = (
     "Taslaklar",

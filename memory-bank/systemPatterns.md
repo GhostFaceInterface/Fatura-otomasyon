@@ -12,6 +12,8 @@
 - e-Arsiv sayfa navigasyonu `EArchiveNavigation`, form doldurma `InvoiceFormFiller`, hata hook'lari `PortalErrorDetector`, tek kayit orchestration `DraftCreator` icinde tutulur.
 - Portal retry/backoff ihtiyaci `utils.retry.retry_with_backoff` ile kucuk ve hedefli tutulur.
 - Navigation hazir kontrolu tek alan yerine birden fazla kritik form alanini dogrular.
+- KDV 0 sonrasi gelen istisna bilgi mesaji `PortalErrorDetector` tarafindan zararsiz portal bilgisi olarak kapatilip yoksayilir.
+- TCKN sonrasi `#txtTaxSchemeName` doluysa Turmob sorgusu atlanir; mevcut portal ad/soyad alanlariyla dogrulama devam eder.
 - Turmob sonrasi ad/soyad kontrolu `InvoiceFormFiller` icinde yapilir; uyusmazlik typed exception ile status'a map edilir.
 - Tek kayit draft DB/status akisi `SingleDraftService` ile repository'ye yazilir.
 - Gercek portal dialoglari `PortalErrorDetector` tarafindan okunur, OK ile kapatilir, screenshot alinir ve typed exception'a donusturulur.

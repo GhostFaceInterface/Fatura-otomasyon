@@ -166,3 +166,15 @@ Tamamlandi:
 - Bos, NaN veya parse edilemeyen tutarlar satir bazli import hatasi olarak raporlanir.
 - Basarili parse icin raw ve normalized tutar loglanir; hata durumunda satir ve raw deger loglanir.
 - Import testleri genisletildi; tum test paketi 63 test ile basarili calisti.
+
+## Canli Pilot Hardening Bug Fix
+
+Tamamlandi:
+
+- KDV 0 secimi sonrasi gelen `Fatura Tipi ISTISNA olarak degistirilmistir` portal bilgi mesaji hata sayilmaktan cikarildi.
+- Bu bilgi hem dialog hem inline/toast metni olarak algilansa da otomatik kapatilip akisa devam edilir.
+- TCKN girildikten sonra `#txtTaxSchemeName` alaninin dolmasi 2 saniye beklenir.
+- Vergi dairesi doluysa Turmob sorgusu atlanir ve kontor harcanmadan mevcut form verisiyle isleme devam edilir.
+- Turmob atlanan durumda mevcut ad/soyad alanlari yine local kayitla dogrulanir.
+- Taslak Kaydet sonrasi portal yuklenmesi icin 2 saniyelik bekleme eklendi.
+- Test paketi 66 test ile basarili calisti.

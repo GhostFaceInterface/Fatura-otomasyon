@@ -10,6 +10,7 @@ import unicodedata
 
 from invoice_automation.app.constants import (
     EFATURA_MUKELLEFI_ERROR_PATTERN,
+    HARMLESS_PORTAL_INFO_PATTERNS,
     INVALID_TCKN_ERROR_PATTERN,
     PORTAL_DIALOG_OK_BUTTON_NAME,
     PORTAL_DIALOG_TITLES,
@@ -101,14 +102,35 @@ class PortalErrorDetector:
         dialog = self.detect_dialog(page, stage=stage, record_id=record_id)
         if dialog is not None:
             self._close_dialog(page, dialog)
+            if self._is_harmless_dialog(dialog):
+                logger.info(
+                    "Portal bilgi dialogu hata sayilmadan gecildi | stage=%s title=%s message=%s normalized_title=%s normalized_message=%s",
+                    stage,
+                    dialog.title,
+                    dialog.message,
+                    dialog.normalized_title,
+                    dialog.normalized_message,
+                )
+                return
             self._raise_for_dialog(dialog)
 
         snapshot = self.collect_inline_errors(page)
         if not snapshot.messages:
             return
 
+        actionable_messages = [
+            message for message in snapshot.messages if not self._is_harmless_text(message)
+        ]
+        if not actionable_messages:
+            logger.info(
+                "Portal inline bilgi mesaji hata sayilmadan gecildi | stage=%s messages=%s",
+                stage,
+                snapshot.messages,
+            )
+            return
+
         logger.info("Portal inline error snapshot | stage=%s messages=%s", stage, snapshot.messages)
-        self._raise_for_text("; ".join(snapshot.messages), stage=stage, screenshot_path=None)
+        self._raise_for_text("; ".join(actionable_messages), stage=stage, screenshot_path=None)
 
     def detect_dialog(
         self,
@@ -208,6 +230,16 @@ class PortalErrorDetector:
             dialog.message,
             stage=dialog.stage,
             screenshot_path=dialog.screenshot_path,
+        )
+
+    def _is_harmless_dialog(self, dialog: PortalDialogSnapshot) -> bool:
+        return self._is_harmless_text(dialog.message)
+
+    def _is_harmless_text(self, text: str) -> bool:
+        normalized_message = normalize_portal_text(text)
+        return any(
+            normalize_portal_text(pattern) in normalized_message
+            for pattern in HARMLESS_PORTAL_INFO_PATTERNS
         )
 
     def _raise_for_text(

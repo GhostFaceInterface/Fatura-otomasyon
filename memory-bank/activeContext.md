@@ -45,3 +45,10 @@ Hedefler:
 - README, `docs/USAGE_GUIDE.md` ve `docs/OPERATIONS_CHECKLIST.md` operasyon odakli guncellendi.
 
 Sonraki ana is canli kullanim oncesi kucuk kayit grubu ile pilot test ve portal selector davranislarini gercek ortamda dogrulamaktir.
+
+Son bug fix:
+
+- Import tutar parsing'i `parse_currency` ile merkezi hale getirildi.
+- `$1.450`, `1.450`, `$850`, `$1,450` gibi binlik ayracli degerler deterministik olarak float tutara normalize edilir.
+- `$1450.75` gibi decimal nokta iceren degerler decimal olarak korunur.
+- Parse edilemeyen veya bos tutarlar satir bazli import hatasi olarak raporlanir ve loglanir.

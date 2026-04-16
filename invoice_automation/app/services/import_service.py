@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from decimal import Decimal, InvalidOperation
 import logging
 from pathlib import Path
 from typing import Any
@@ -43,6 +44,37 @@ COLUMN_ALIASES = {
     "tutar_usd": "tutar_usd",
     "aciklama": "aciklama",
 }
+
+
+def parse_currency(value: Any) -> float:
+    """Normalize USD amount strings from import files into a positive float."""
+
+    if value is None or pd.isna(value):
+        raise ValueError("tutar_usd bos olamaz.")
+
+    if isinstance(value, int | float | Decimal) and not isinstance(value, bool):
+        return _positive_decimal_to_float(Decimal(str(value)))
+
+    raw_value = str(value).strip()
+    if not raw_value:
+        raise ValueError("tutar_usd bos olamaz.")
+
+    cleaned = (
+        raw_value.replace("$", "")
+        .replace("\u00a0", "")
+        .replace(" ", "")
+        .strip()
+    )
+    if not cleaned:
+        raise ValueError("tutar_usd bos olamaz.")
+
+    normalized = _normalize_currency_separators(cleaned)
+    try:
+        amount = Decimal(normalized)
+    except InvalidOperation as exc:
+        raise ValueError(f"tutar_usd parse edilemedi: {raw_value}") from exc
+
+    return _positive_decimal_to_float(amount)
 
 
 def normalize_column_name(column_name: str) -> str:
@@ -139,6 +171,35 @@ class ImportService:
         for index, row in dataframe.iterrows():
             source_row_number = int(index) + 2
             raw_data = self._row_to_clean_dict(row.to_dict())
+            raw_amount = raw_data.get("tutar_usd", "")
+            try:
+                normalized_amount = parse_currency(raw_amount)
+                raw_data["tutar_usd"] = normalized_amount
+                logger.info(
+                    "Import amount parsed | file=%s row=%s raw_value=%r normalized_value=%s",
+                    file_path.name,
+                    source_row_number,
+                    raw_amount,
+                    normalized_amount,
+                )
+            except ValueError as exc:
+                error_message = str(exc)
+                row_errors.append(
+                    RowValidationError(
+                        row_number=source_row_number,
+                        errors=[error_message],
+                        raw_data=raw_data,
+                    )
+                )
+                logger.info(
+                    "Import row skipped | file=%s row=%s raw_value=%r amount_parse_error=%s",
+                    file_path.name,
+                    source_row_number,
+                    raw_amount,
+                    error_message,
+                )
+                continue
+
             validated_data, errors = validate_import_row(raw_data)
             if errors:
                 row_errors.append(
@@ -263,3 +324,47 @@ class ImportService:
             else:
                 clean_row[key] = value
         return clean_row
+
+
+def _normalize_currency_separators(value: str) -> str:
+    """Normalize thousands and decimal separators for deterministic parsing."""
+
+    if "," in value and "." in value:
+        if value.rfind(",") > value.rfind("."):
+            return value.replace(".", "").replace(",", ".")
+        return value.replace(",", "")
+
+    if "," in value:
+        parts = value.split(",")
+        if _has_grouped_thousands(parts):
+            return "".join(parts)
+        if len(parts) == 2:
+            return ".".join(parts)
+        raise ValueError(f"tutar_usd parse edilemedi: {value}")
+
+    if "." in value:
+        parts = value.split(".")
+        if _has_grouped_thousands(parts):
+            return "".join(parts)
+        if len(parts) == 2:
+            return value
+        raise ValueError(f"tutar_usd parse edilemedi: {value}")
+
+    return value
+
+
+def _has_grouped_thousands(parts: list[str]) -> bool:
+    if len(parts) < 2:
+        return False
+    first_part = parts[0]
+    if first_part.startswith(("+", "-")):
+        first_part = first_part[1:]
+    if not first_part or not first_part.isdigit():
+        return False
+    return all(len(part) == 3 and part.isdigit() for part in parts[1:])
+
+
+def _positive_decimal_to_float(amount: Decimal) -> float:
+    if amount <= 0:
+        raise ValueError("tutar_usd pozitif olmalidir.")
+    return float(amount)

@@ -4,7 +4,7 @@ import pandas as pd
 import pytest
 
 from invoice_automation.app.db.repository import InvoiceRecordRepository
-from invoice_automation.app.services.import_service import ImportService
+from invoice_automation.app.services.import_service import ImportService, parse_currency
 from invoice_automation.app.utils.exceptions import ImportValidationError
 
 
@@ -25,6 +25,45 @@ def test_import_service_imports_valid_csv_rows(tmp_path: Path) -> None:
     assert repository.list_all()[0].kaynak_dosya == "valid.csv"
     assert result.batch is not None
     assert repository.list_all()[0].batch_id == result.batch.id
+
+
+@pytest.mark.parametrize(
+    ("raw_value", "expected"),
+    [
+        ("$1.450", 1450.0),
+        ("$850", 850.0),
+        ("1.350", 1350.0),
+        ("1350", 1350.0),
+        ("$1,450", 1450.0),
+        ("$1450.75", 1450.75),
+    ],
+)
+def test_parse_currency_normalizes_import_amounts(raw_value: str, expected: float) -> None:
+    assert parse_currency(raw_value) == expected
+
+
+@pytest.mark.parametrize("raw_value", ["", "   ", None, "abc"])
+def test_parse_currency_rejects_empty_or_unparseable_values(raw_value) -> None:
+    with pytest.raises(ValueError):
+        parse_currency(raw_value)
+
+
+def test_import_service_normalizes_currency_amounts_before_persisting(tmp_path: Path) -> None:
+    csv_path = tmp_path / "amounts.csv"
+    csv_path.write_text(
+        "ad,soyad,tc_kimlik_no,tutar_usd,aciklama\n"
+        'Ali,Yilmaz,12345678901,"$1.450",Gecerli\n'
+        'Ayse,Demir,10987654321,"$1,450",Gecerli\n',
+        encoding="utf-8",
+    )
+    repository = InvoiceRecordRepository(tmp_path / "test.sqlite3")
+
+    result = ImportService(repository).import_file(csv_path)
+    records = repository.list_all(batch_id=result.batch.id)
+
+    assert result.imported_count == 2
+    assert result.failed_count == 0
+    assert sorted(record.tutar_usd for record in records) == [1450.0, 1450.0]
 
 
 def test_import_service_rejects_missing_columns(tmp_path: Path) -> None:

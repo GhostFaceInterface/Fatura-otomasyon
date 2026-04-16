@@ -155,3 +155,14 @@ Notlar:
 Henuz tamamlanmayan sonraki isler:
 
 - Canli pilot sonrasi portal UI'da degisen selector veya metinler varsa kucuk uyarlama.
+
+## Import Tutar Normalizasyonu Bug Fix
+
+Tamamlandi:
+
+- `ImportService` icinde merkezi `parse_currency(value)` fonksiyonu eklendi.
+- `$1.450`, `1.450`, `$850`, `850`, `$1,450` degerleri beklenen USD float degerlerine normalize edilir.
+- `$1450.75` decimal senaryosu desteklenir.
+- Bos, NaN veya parse edilemeyen tutarlar satir bazli import hatasi olarak raporlanir.
+- Basarili parse icin raw ve normalized tutar loglanir; hata durumunda satir ve raw deger loglanir.
+- Import testleri genisletildi; tum test paketi 63 test ile basarili calisti.

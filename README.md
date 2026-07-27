@@ -158,7 +158,9 @@ python -m playwright install chromium
 
 ## Ortam Ayarları
 
-Örnek ortam dosyasını kopyalayın:
+`.env` isteğe bağlıdır. Uygulama bu dosya olmadan lokal paneli güvenli varsayılanlarla açar. Portal oturumu açılacaksa kullanıcı adı ve şifre `.env` içinde veya kabuk ortamında tanımlanmalıdır.
+
+Özelleştirilmiş ayarlar veya portal bilgileri kullanmak için örnek ortam dosyasını kopyalayın:
 
 ```bash
 cp .env.example .env
@@ -168,7 +170,7 @@ Temel ayarlar:
 
 ```env
 APP_HOST=127.0.0.1
-APP_PORT=8000
+APP_PORT=8010
 APP_DEBUG=false
 
 DATABASE_PATH=data/invoice_automation.sqlite3
@@ -229,14 +231,29 @@ SLEEP_PREVENTION_KEEP_DISPLAY_AWAKE=true
 
 ## Çalıştırma
 
+En kolay ve güvenli başlangıç komutu:
+
 ```bash
-python run.py
+./scripts/start.sh
+```
+
+Betik `.env` dosyası olmadan da çalışır. İlk çalıştırmada proje içindeki `.venv/` ortamını, sabitlenmiş Python bağımlılıklarını ve Playwright Chromium'u hazırlar. Bu indirmeler internet erişimi gerektirir. Sonraki çalıştırmalarda aynı izole ortamı kullanır.
+
+> [!NOTE]
+> Başlatma komutu yalnızca lokal web panelini açar. Portal oturumu, tek kayıt taslağı veya toplu taslak oluşturma başlatmaz; bunlar panelde kullanıcının ayrı ve açık bir eylemiyle yapılır.
+
+Panel varsayılan olarak `http://127.0.0.1:8010` adresinde açılır. `8000` portu bu proje tarafından kasıtlı olarak reddedilir. Geçici olarak başka bir port kullanmak için örneğin `APP_PORT=8123 ./scripts/start.sh` çalıştırın; kalıcı seçim için `.env` içindeki `APP_PORT` değerini değiştirin. `.env` yoksa betik 8010 varsayılanını kullanır.
+
+Elle çalıştırmak için:
+
+```bash
+.venv/bin/python run.py
 ```
 
 Uygulama varsayılan olarak şu adreste açılır:
 
 ```text
-http://127.0.0.1:8000
+http://127.0.0.1:8010
 ```
 
 Runtime dosyaları proje içindeki `data/` klasörü altında tutulur:

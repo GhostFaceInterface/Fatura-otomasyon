@@ -5,15 +5,18 @@ Bu kilavuz operasyon kullanicisinin bir fatura donemini import edip secili kayit
 ## 1. Uygulamayi Baslatma
 
 ```bash
-source .venv/bin/activate
-python run.py
+./scripts/start.sh
 ```
+
+İlk çalıştırmada betik `.venv/` ortamını, sabitlenmiş bağımlılıkları ve Playwright Chromium'u kurar. `.env` isteğe bağlıdır; yoksa panel varsayılan ayarlarla açılır. Portal oturumu açılacaksa `PORTAL_USERNAME` ve `PORTAL_PASSWORD` değerlerini `.env` içine veya kabuk ortamına ekleyin. Başlatmak portal oturumu açmaz veya taslak fatura oluşturmaz.
 
 Paneli acin:
 
 ```text
-http://127.0.0.1:8000
+http://127.0.0.1:8010
 ```
+
+`8000` bu proje tarafindan kullanilmaz. Gerekirse `.env` icindeki `APP_PORT` degerini degistirin veya tek calistirma icin `APP_PORT=8123 ./scripts/start.sh` kullanin.
 
 ## 2. Yeni Fatura Donemi Import Etme
 

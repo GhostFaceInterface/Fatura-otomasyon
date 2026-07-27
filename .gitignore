@@ -12,6 +12,7 @@ data/logs/*.log
 data/logs/screenshots/
 data/imports/*
 data/processed/*
+data/backups/
 
 !data/imports/.gitkeep
 !data/processed/.gitkeep

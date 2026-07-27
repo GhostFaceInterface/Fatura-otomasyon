@@ -234,3 +234,17 @@ Tamamlandi:
 - Kurulum, ortam ayarlari, veri formati, operasyon akisi, yetenekler, durumlar, log/screenshot konumlari, teknik mimari, guvenlik notlari ve sinirlar detaylandirildi.
 - README gorsel olarak renkli Shields rozetleri ve Mermaid akis/mimari diagramlariyla zenginlestirildi.
 - Portal icindeki tek tek buton adimlari dokumante edilmedi; yuksek seviye kullanim ve operasyon mantigi korundu.
+
+## Sezon Baslangici Operasyon Hazirligi
+
+Tamamlandi:
+
+- `./scripts/start.sh` ile tek komutla guvenli lokal panel baslatma eklendi.
+- `.env` istege baglidir; yoksa betik paneli kod icindeki varsayimlarla baslatir ve portal kimlik bilgilerinin yalnizca oturum asamasinda gerekecegini bildirir.
+- Ilk calistirma `.venv` ortamini, `requirements.txt` icindeki sabitlenmis paketleri ve Playwright Chromium'u hazirlar.
+- Baslatma davranisinin otomasyon baslatmadigi README ve kullanim kilavuzunda netlestirildi.
+- Varsayilan lokal port `8010` yapildi. `scripts/start.sh`, 8000 portunu reddeder; `APP_PORT` ile farkli bir port secilebilir.
+
+Operasyon notu:
+
+- Bu calisma alaninda mevcut `.env`, `.venv` ve Playwright Chromium cache'i bulunmuyor. Canli kullanima gecmeden once yerel `.env` dosyasi olusturulup portal bilgileri girilmeli; ilk calistirma internet erisimi gerektirir.

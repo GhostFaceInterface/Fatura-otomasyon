@@ -97,3 +97,12 @@ README final dokumantasyon guncellemesi:
 - Odak program amaci, toplu e-Arsiv taslak fatura otomasyonu, kurulum, yetenekler, veri formati, operasyon akisi, durumlar, raporlama, mimari ve guvenlik notlari olarak belirlendi.
 - Portal icindeki tek tek buton adimlari anlatilmadi; yuksek seviye toplu taslak fatura otomasyonu dili kullanildi.
 - README icine renkli Shields rozetleri ve renkli Mermaid akis/mimari diagramlari eklendi.
+
+Sezon baslangici operasyon hazirligi:
+
+- `scripts/start.sh` eklendi. `.env` istege baglidir; yoksa panel kod icindeki guvenli varsayimlarla baslar.
+- Ilk calistirmada Python 3.11-3.13 ile `.venv`, pinned bagimliliklar ve Playwright Chromium hazirlanir; sonra sadece lokal panel calisir.
+- Betik portal oturumu, tekli taslak veya toplu taslak eylemi tetiklemez.
+- Baslatma komutu ve guvenlik siniri README ile kullanim kilavuzunda belgelendi.
+- Port 8000 bu proje icin kesinlikle yasaktir. Baslatma betigi `.env` veya kabuk ortami ile verilen `APP_PORT=8000` degerini reddeder; varsayilan port `8010`dur.
+- Portal kullanici adi/sifresi panel acilisinda gerekli degildir. Eksikse yalnizca kullanici oturum acma eylemini baslattiginda anlamli config hatasi uretilir.

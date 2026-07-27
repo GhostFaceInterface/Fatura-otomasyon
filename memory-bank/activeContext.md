@@ -104,5 +104,5 @@ Sezon baslangici operasyon hazirligi:
 - Ilk calistirmada Python 3.11-3.13 ile `.venv`, pinned bagimliliklar ve Playwright Chromium hazirlanir; sonra sadece lokal panel calisir.
 - Betik portal oturumu, tekli taslak veya toplu taslak eylemi tetiklemez.
 - Baslatma komutu ve guvenlik siniri README ile kullanim kilavuzunda belgelendi.
-- Port 8000 bu proje icin kesinlikle yasaktir. Baslatma betigi `.env` veya kabuk ortami ile verilen `APP_PORT=8000` degerini reddeder; varsayilan port `8010`dur.
+- Port 8000 bu proje icin kullanilmaz. Baslatma betigi `.env` veya kabuk ortami ile gelen `APP_PORT=8000` degerini otomatik olarak `8010`e yonlendirir; kullanicidan ayar istenmez.
 - Portal kullanici adi/sifresi panel acilisinda gerekli degildir. Eksikse yalnizca kullanici oturum acma eylemini baslattiginda anlamli config hatasi uretilir.

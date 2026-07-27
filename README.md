@@ -242,7 +242,7 @@ Betik `.env` dosyası olmadan da çalışır. İlk çalıştırmada proje içind
 > [!NOTE]
 > Başlatma komutu yalnızca lokal web panelini açar. Portal oturumu, tek kayıt taslağı veya toplu taslak oluşturma başlatmaz; bunlar panelde kullanıcının ayrı ve açık bir eylemiyle yapılır.
 
-Panel varsayılan olarak `http://127.0.0.1:8010` adresinde açılır. `8000` portu bu proje tarafından kasıtlı olarak reddedilir. Geçici olarak başka bir port kullanmak için örneğin `APP_PORT=8123 ./scripts/start.sh` çalıştırın; kalıcı seçim için `.env` içindeki `APP_PORT` değerini değiştirin. `.env` yoksa betik 8010 varsayılanını kullanır.
+Panel varsayılan olarak `http://127.0.0.1:8010` adresinde açılır. Ortamdan veya `.env` dosyasından `8000` gelirse betik bunu güvenle `8010`e yönlendirir; kullanıcıdan ayar istenmez. İsteğe bağlı olarak `8000` dışındaki bir port için örneğin `APP_PORT=8123 ./scripts/start.sh` çalıştırılabilir. `.env` yoksa betik 8010 varsayılanını kullanır.
 
 Elle çalıştırmak için:
 

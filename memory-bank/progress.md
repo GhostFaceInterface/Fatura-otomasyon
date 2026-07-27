@@ -243,7 +243,7 @@ Tamamlandi:
 - `.env` istege baglidir; yoksa betik paneli kod icindeki varsayimlarla baslatir ve portal kimlik bilgilerinin yalnizca oturum asamasinda gerekecegini bildirir.
 - Ilk calistirma `.venv` ortamini, `requirements.txt` icindeki sabitlenmis paketleri ve Playwright Chromium'u hazirlar.
 - Baslatma davranisinin otomasyon baslatmadigi README ve kullanim kilavuzunda netlestirildi.
-- Varsayilan lokal port `8010` yapildi. `scripts/start.sh`, 8000 portunu reddeder; `APP_PORT` ile farkli bir port secilebilir.
+- Varsayilan lokal port `8010` yapildi. `scripts/start.sh`, 8000 portunu otomatik olarak 8010'e yonlendirir; `APP_PORT` ile farkli bir port secilebilir.
 
 Operasyon notu:
 

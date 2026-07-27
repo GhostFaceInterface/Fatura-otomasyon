@@ -16,7 +16,7 @@ Paneli acin:
 http://127.0.0.1:8010
 ```
 
-`8000` bu proje tarafindan kullanilmaz. Gerekirse `.env` icindeki `APP_PORT` degerini degistirin veya tek calistirma icin `APP_PORT=8123 ./scripts/start.sh` kullanin.
+`8000` ortamdan gelse bile betik otomatik olarak `8010` kullanir. Farkli bir port yalnizca istege baglidir; ornegin `APP_PORT=8123 ./scripts/start.sh` kullanabilirsiniz.
 
 ## 2. Yeni Fatura Donemi Import Etme
 

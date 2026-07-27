@@ -20,8 +20,8 @@ if [[ ! "$APP_PORT" =~ ^[1-9][0-9]{0,4}$ ]] || (( APP_PORT > 65535 )); then
   exit 1
 fi
 if [[ "$APP_PORT" == "8000" ]]; then
-  printf '%s\n' "Güvenlik kısıtı: 8000 portu kullanılamaz. APP_PORT değerini örneğin 8010 yapın."
-  exit 1
+  APP_PORT="8010"
+  printf '%s\n' "Bilgi: 8000 portu kullanılmadı; panel 8010 portunda başlatılacak."
 fi
 export APP_PORT
 

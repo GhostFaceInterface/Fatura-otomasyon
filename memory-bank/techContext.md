@@ -10,7 +10,7 @@
 - Playwright, Faz 3 ve sonrasi icin hazir bagimlilik
 - pytest
 
-Uygulama `python run.py` ile varsayilan olarak `127.0.0.1:8000` adresinde calisir. `scripts/start.sh` bunun yerine 8010 varsayilanini uygular ve 8000'i reddeder. Runtime verileri `data/` altinda tutulur.
+Uygulama `python run.py` ile varsayilan olarak `127.0.0.1:8000` adresinde calisir. `scripts/start.sh` bunun yerine 8010 varsayilanini uygular; 8000 gelirse otomatik olarak 8010'e yonlendirir. Runtime verileri `data/` altinda tutulur.
 
 Playwright Python paketi `requirements.txt` ile kurulur, ancak browser binary'leri ayrica indirilmelidir. Ilk kurulumda veya cache temizlendiyse `venv/bin/python -m playwright install chromium` calistirilmelidir.
 

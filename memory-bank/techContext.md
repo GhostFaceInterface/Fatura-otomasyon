@@ -10,7 +10,7 @@
 - Playwright, Faz 3 ve sonrasi icin hazir bagimlilik
 - pytest
 
-Uygulama `python run.py` ile varsayilan olarak `127.0.0.1:8000` adresinde calisir. `scripts/start.sh` bunun yerine 8010 varsayilanini uygular; 8000 gelirse otomatik olarak 8010'e yonlendirir. Runtime verileri `data/` altinda tutulur.
+Uygulama `python run.py` ile varsayilan olarak `127.0.0.1:8010` adresinde calisir (`APP_PORT` varsayilani 8010; `run.py` de 8000 gelirse 8010'a yonlendirir). `scripts/start.sh` ayni kurali uygular. Runtime verileri `data/` altinda tutulur.
 
 Playwright Python paketi `requirements.txt` ile kurulur, ancak browser binary'leri ayrica indirilmelidir. Ilk kurulumda veya cache temizlendiyse `venv/bin/python -m playwright install chromium` calistirilmelidir.
 
@@ -37,3 +37,8 @@ Son faz:
 
 - `invoice_automation/app/utils/retry.py` merkezi kisa retry/backoff helper saglar.
 - Operasyon dokumantasyonu `README.md`, `docs/USAGE_GUIDE.md` ve `docs/OPERATIONS_CHECKLIST.md` icinde tutulur.
+
+Guvenilirlik sertlestirmesi (2026-10-17):
+
+- Sync Playwright thread'e bagli oldugu icin tum Playwright cagrilari `automation/playwright_worker.py` icindeki tek kalici thread'de (`ThreadPoolExecutor(max_workers=1)`) calisir.
+- Testlerde `httpx` kurulu degil; route'lar TestClient yerine servis/repository seviyesinde test edilir. Canli route smoke testi gecici DB ile 8011 gibi 8000 disi bir portta yapilir.

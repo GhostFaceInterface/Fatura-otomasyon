@@ -44,6 +44,8 @@ def validate_positive_usd_amount(value: Any) -> float:
         amount = Decimal(normalized)
     except InvalidOperation as exc:
         raise ValueError("tutar_usd sayisal bir deger olmalidir.") from exc
+    if not amount.is_finite():
+        raise ValueError("tutar_usd sonlu bir sayi olmalidir.")
     if amount <= 0:
         raise ValueError("tutar_usd pozitif olmalidir.")
     return float(amount)

@@ -301,3 +301,151 @@ def test_repository_lists_only_selected_eligible_records_for_batch(tmp_path: Pat
     eligible_records = repository.list_selected_for_batch()
 
     assert [record.id for record in eligible_records] == [pending.id, selected.id]
+
+
+def _new_record(repository: InvoiceRecordRepository, tc: str = "12345678901"):
+    return repository.create(
+        InvoiceRecordCreate(ad="Ali", soyad="Yilmaz", tc_kimlik_no=tc, tutar_usd=100.0)
+    )
+
+
+def test_claim_for_processing_is_atomic_and_only_once(tmp_path: Path) -> None:
+    repository = InvoiceRecordRepository(tmp_path / "test.sqlite3")
+    record = _new_record(repository)
+
+    first = repository.claim_for_processing(record.id)
+    second = repository.claim_for_processing(record.id)
+
+    assert first is not None
+    assert first.islem_durumu == InvoiceStatus.IN_PROGRESS.value
+    assert second is None
+
+
+def test_claim_for_processing_is_exclusive_across_threads(tmp_path: Path) -> None:
+    import threading
+
+    repository = InvoiceRecordRepository(tmp_path / "test.sqlite3")
+    record = _new_record(repository)
+    barrier = threading.Barrier(8)
+    results: list[bool] = []
+
+    def claim() -> None:
+        barrier.wait()
+        results.append(repository.claim_for_processing(record.id) is not None)
+
+    threads = [threading.Thread(target=claim) for _ in range(8)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert results.count(True) == 1
+
+
+def test_recover_stale_in_progress_moves_records_to_needs_review(tmp_path: Path) -> None:
+    repository = InvoiceRecordRepository(tmp_path / "test.sqlite3")
+    stuck = _new_record(repository, "12345678901")
+    untouched = _new_record(repository, "12345678902")
+    repository.claim_for_processing(stuck.id)
+
+    assert repository.recover_stale_in_progress() == 1
+
+    recovered = repository.get(stuck.id)
+    assert recovered.islem_durumu == InvoiceStatus.NEEDS_REVIEW.value
+    assert recovered.hata_kodu == "StaleInProgressRecovered"
+    assert recovered.secili_mi is False
+    assert repository.get(untouched.id).islem_durumu == InvoiceStatus.PENDING.value
+    assert repository.recover_stale_in_progress() == 0
+
+
+def test_reset_failed_to_pending_only_touches_retryable_statuses(tmp_path: Path) -> None:
+    repository = InvoiceRecordRepository(tmp_path / "test.sqlite3")
+    failed = _new_record(repository, "12345678901")
+    aborted = _new_record(repository, "12345678902")
+    success = _new_record(repository, "12345678903")
+    review = _new_record(repository, "12345678904")
+    skipped = _new_record(repository, "12345678905")
+    repository.update_processing_state(
+        failed.id, InvoiceStatus.FAILED_PORTAL_TIMEOUT, hata_kodu="X", hata_mesaji="x", secili_mi=True
+    )
+    repository.update_processing_state(aborted.id, InvoiceStatus.ABORTED_SESSION_LOST)
+    repository.update_processing_state(success.id, InvoiceStatus.SUCCESS_DRAFT_CREATED)
+    repository.update_processing_state(review.id, InvoiceStatus.NEEDS_REVIEW)
+    repository.update_processing_state(skipped.id, InvoiceStatus.SKIPPED_EFATURA_MUKELLEFI)
+
+    reset = repository.reset_failed_to_pending(
+        [failed.id, aborted.id, success.id, review.id, skipped.id]
+    )
+
+    assert reset == 2
+    reset_record = repository.get(failed.id)
+    assert reset_record.islem_durumu == InvoiceStatus.PENDING.value
+    assert reset_record.hata_kodu is None
+    assert reset_record.secili_mi is False
+    assert repository.get(aborted.id).islem_durumu == InvoiceStatus.PENDING.value
+    assert repository.get(success.id).islem_durumu == InvoiceStatus.SUCCESS_DRAFT_CREATED.value
+    assert repository.get(review.id).islem_durumu == InvoiceStatus.NEEDS_REVIEW.value
+    assert repository.get(skipped.id).islem_durumu == InvoiceStatus.SKIPPED_EFATURA_MUKELLEFI.value
+
+
+def test_resolve_needs_review_requires_review_status(tmp_path: Path) -> None:
+    repository = InvoiceRecordRepository(tmp_path / "test.sqlite3")
+    exists = _new_record(repository, "12345678901")
+    missing = _new_record(repository, "12345678902")
+    pending = _new_record(repository, "12345678903")
+    repository.update_processing_state(exists.id, InvoiceStatus.NEEDS_REVIEW)
+    repository.update_processing_state(missing.id, InvoiceStatus.NEEDS_REVIEW)
+
+    resolved_exists = repository.resolve_needs_review(exists.id, draft_exists=True)
+    resolved_missing = repository.resolve_needs_review(missing.id, draft_exists=False)
+
+    assert resolved_exists.islem_durumu == InvoiceStatus.SUCCESS_DRAFT_CREATED.value
+    assert resolved_missing.islem_durumu == InvoiceStatus.PENDING.value
+    assert repository.resolve_needs_review(pending.id, draft_exists=True) is None
+    assert repository.get(pending.id).islem_durumu == InvoiceStatus.PENDING.value
+
+
+def test_initialize_database_migrates_pre_batch_schema(tmp_path: Path) -> None:
+    import sqlite3
+
+    from invoice_automation.app.db.database import initialize_database
+
+    db_path = tmp_path / "legacy.sqlite3"
+    connection = sqlite3.connect(db_path)
+    connection.executescript(
+        """
+        CREATE TABLE invoice_records (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ad TEXT NOT NULL,
+            soyad TEXT NOT NULL,
+            tc_kimlik_no TEXT NOT NULL,
+            tutar_usd REAL NOT NULL,
+            aciklama TEXT,
+            fatura_tipi_hedef TEXT NOT NULL DEFAULT 'earshiv',
+            kaynak_dosya TEXT,
+            kaynak_satir_no INTEGER,
+            secili_mi INTEGER NOT NULL DEFAULT 0,
+            islem_durumu TEXT NOT NULL DEFAULT 'PENDING',
+            portal_ref_no TEXT,
+            hata_kodu TEXT,
+            hata_mesaji TEXT,
+            olusturma_zamani TEXT NOT NULL,
+            guncelleme_zamani TEXT NOT NULL
+        );
+        INSERT INTO invoice_records (ad, soyad, tc_kimlik_no, tutar_usd, olusturma_zamani, guncelleme_zamani)
+        VALUES ('Ali', 'Yilmaz', '12345678901', 100.0, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
+        """
+    )
+    connection.commit()
+    connection.close()
+
+    initialize_database(db_path)
+    initialize_database(db_path)
+
+    connection = sqlite3.connect(db_path)
+    columns = {row[1] for row in connection.execute("PRAGMA table_info(invoice_records)")}
+    indexes = {row[1] for row in connection.execute("PRAGMA index_list(invoice_records)")}
+    connection.close()
+    assert "batch_id" in columns
+    assert "idx_invoice_records_batch_id" in indexes
+    assert InvoiceRecordRepository(db_path).count() == 1

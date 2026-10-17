@@ -1,6 +1,14 @@
+import pytest
+
 from invoice_automation.app.automation.draft_creator import DraftCreator
 from invoice_automation.app.constants import EARCHIVE_DRAFTS_PATH, InvoiceStatus
 from invoice_automation.app.db.models import InvoiceRecord
+from invoice_automation.app.utils.exceptions import (
+    DraftSaveUnconfirmedError,
+    InvalidTCKNError,
+    PortalTimeoutError,
+    UnknownPortalError,
+)
 
 
 class FakeNavigation:
@@ -131,3 +139,74 @@ def test_draft_creator_accepts_visible_drafts_page_signal_when_redirect_wait_tim
     assert result.status == InvoiceStatus.SUCCESS_DRAFT_CREATED
     assert ("draft_redirect_wait", 11) in detector.calls
     assert ("wait_for_text", "Taslaklar", "visible", 2_000) in page.actions
+
+
+class RaisingAfterSaveDetector(FakeDetector):
+    def __init__(self, exc: Exception) -> None:
+        super().__init__()
+        self.exc = exc
+
+    def raise_if_portal_error(self, page, stage: str, record_id: int | None = None) -> None:
+        super().raise_if_portal_error(page, stage, record_id)
+        if stage == "save_draft":
+            raise self.exc
+
+
+class FailingClickButton(FakeButton):
+    def click(self, timeout: int = 0) -> None:
+        raise RuntimeError("navigation wait timed out after click")
+
+
+class MissingButton(FakeButton):
+    def wait_for(self, state: str = "visible", timeout: int = 0) -> None:
+        raise RuntimeError("button not visible")
+
+
+def _creator(detector: FakeDetector) -> DraftCreator:
+    return DraftCreator(
+        navigation=FakeNavigation(),
+        form_filler=FakeFormFiller(),
+        error_detector=detector,
+        timeout_ms=30_000,
+    )
+
+
+def test_draft_creator_reports_unconfirmed_save_when_redirect_missing() -> None:
+    page = FakeDraftPage()
+    page.fail_wait_for_url = True
+
+    with pytest.raises(DraftSaveUnconfirmedError) as exc_info:
+        _creator(FakeDetector()).create_draft(page, _record())
+
+    assert not isinstance(exc_info.value, PortalTimeoutError)
+    assert exc_info.value.stage == "draft_redirect_wait"
+
+
+def test_draft_creator_reports_unconfirmed_save_for_unknown_post_save_error() -> None:
+    detector = RaisingAfterSaveDetector(UnknownPortalError("Beklenmeyen mesaj", stage="save_draft"))
+
+    with pytest.raises(DraftSaveUnconfirmedError):
+        _creator(detector).create_draft(FakeDraftPage(), _record())
+
+
+def test_draft_creator_keeps_explicit_portal_rejection_after_save() -> None:
+    detector = RaisingAfterSaveDetector(InvalidTCKNError("gecersiz", stage="save_draft"))
+
+    with pytest.raises(InvalidTCKNError):
+        _creator(detector).create_draft(FakeDraftPage(), _record())
+
+
+def test_draft_creator_treats_click_failure_as_unconfirmed_save() -> None:
+    page = FakeDraftPage()
+    page.get_by_role = lambda role, name: FailingClickButton(page)
+
+    with pytest.raises(DraftSaveUnconfirmedError):
+        _creator(FakeDetector()).create_draft(page, _record())
+
+
+def test_draft_creator_missing_save_button_is_clean_timeout() -> None:
+    page = FakeDraftPage()
+    page.get_by_role = lambda role, name: MissingButton(page)
+
+    with pytest.raises(PortalTimeoutError):
+        _creator(FakeDetector()).create_draft(page, _record())

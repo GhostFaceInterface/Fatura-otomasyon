@@ -129,3 +129,59 @@ def test_import_service_imports_selected_excel_sheet_with_column_mapping(tmp_pat
     assert result.batch.sheet_name == "Nisan"
     assert len(records) == 1
     assert records[0].ad == "Ali"
+
+
+@pytest.mark.parametrize(
+    "raw_value",
+    ["NaN", "nan", "sNaN", "Infinity", "-Infinity", "$inf", float("inf"), float("-inf")],
+)
+def test_parse_currency_rejects_non_finite_values(raw_value) -> None:
+    with pytest.raises(ValueError):
+        parse_currency(raw_value)
+
+
+def test_import_service_reports_non_finite_amount_as_row_error(tmp_path: Path) -> None:
+    csv_path = tmp_path / "nan.csv"
+    csv_path.write_text(
+        "ad,soyad,tc_kimlik_no,tutar_usd\n"
+        "Ali,Yilmaz,12345678901,NaN\n"
+        "Ayse,Demir,10987654321,Infinity\n"
+        "Veli,Kaya,11111111111,150\n",
+        encoding="utf-8",
+    )
+    repository = InvoiceRecordRepository(tmp_path / "test.sqlite3")
+
+    result = ImportService(repository).import_file(csv_path)
+
+    assert result.imported_count == 1
+    assert result.failed_count == 2
+    assert repository.count() == 1
+
+
+def test_import_service_rolls_back_whole_import_on_persist_failure(tmp_path: Path, monkeypatch) -> None:
+    csv_path = tmp_path / "valid.csv"
+    csv_path.write_text(
+        "ad,soyad,tc_kimlik_no,tutar_usd\n"
+        "Ali,Yilmaz,12345678901,100\n"
+        "Ayse,Demir,10987654321,200\n",
+        encoding="utf-8",
+    )
+    repository = InvoiceRecordRepository(tmp_path / "test.sqlite3")
+    from invoice_automation.app.db import repository as repository_module
+
+    original_insert = repository_module._insert_record
+    calls = {"count": 0}
+
+    def failing_insert(connection, record, now):
+        calls["count"] += 1
+        if calls["count"] == 2:
+            raise RuntimeError("disk full")
+        return original_insert(connection, record, now)
+
+    monkeypatch.setattr(repository_module, "_insert_record", failing_insert)
+
+    with pytest.raises(RuntimeError):
+        ImportService(repository).import_file(csv_path)
+
+    assert repository.count() == 0
+    assert repository.list_import_batches() == []

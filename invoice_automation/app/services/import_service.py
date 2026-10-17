@@ -53,7 +53,10 @@ def parse_currency(value: Any) -> float:
         raise ValueError("tutar_usd bos olamaz.")
 
     if isinstance(value, int | float | Decimal) and not isinstance(value, bool):
-        return _positive_decimal_to_float(Decimal(str(value)))
+        try:
+            return _positive_decimal_to_float(Decimal(str(value)))
+        except InvalidOperation as exc:
+            raise ValueError(f"tutar_usd parse edilemedi: {value}") from exc
 
     raw_value = str(value).strip()
     if not raw_value:
@@ -71,10 +74,9 @@ def parse_currency(value: Any) -> float:
     normalized = _normalize_currency_separators(cleaned)
     try:
         amount = Decimal(normalized)
+        return _positive_decimal_to_float(amount)
     except InvalidOperation as exc:
         raise ValueError(f"tutar_usd parse edilemedi: {raw_value}") from exc
-
-    return _positive_decimal_to_float(amount)
 
 
 def normalize_column_name(column_name: str) -> str:
@@ -157,15 +159,8 @@ class ImportService:
         dataframe = self._read_dataframe(file_path, effective_sheet_name)
         dataframe = self._apply_mapping_or_normalize(dataframe, column_mapping)
         validate_required_columns(dataframe.columns)
-        import_batch = self.repository.create_import_batch(
-            ImportBatchCreate(
-                name=self._batch_name(batch_name, file_path, effective_sheet_name),
-                source_file_name=file_path.name,
-                sheet_name=effective_sheet_name,
-            )
-        )
 
-        records = []
+        records_to_create: list[InvoiceRecordCreate] = []
         row_errors: list[RowValidationError] = []
 
         for index, row in dataframe.iterrows():
@@ -218,15 +213,24 @@ class ImportService:
                 continue
 
             assert validated_data is not None
-            created_record = self.repository.create(
+            records_to_create.append(
                 InvoiceRecordCreate(
                     **validated_data,
-                    batch_id=import_batch.id,
                     kaynak_dosya=file_path.name,
                     kaynak_satir_no=source_row_number,
                 )
             )
-            records.append(created_record)
+
+        # Rows are validated first and persisted together with the batch in one
+        # transaction, so a failure never leaves a half-imported fatura donemi.
+        import_batch, records = self.repository.create_import(
+            ImportBatchCreate(
+                name=self._batch_name(batch_name, file_path, effective_sheet_name),
+                source_file_name=file_path.name,
+                sheet_name=effective_sheet_name,
+            ),
+            records_to_create,
+        )
 
         logger.info(
             "Import completed | file=%s batch_id=%s sheet=%s imported=%s failed=%s",
@@ -365,6 +369,9 @@ def _has_grouped_thousands(parts: list[str]) -> bool:
 
 
 def _positive_decimal_to_float(amount: Decimal) -> float:
+    # NaN/Infinity are valid Decimals; NaN even raises InvalidOperation on "<=".
+    if not amount.is_finite():
+        raise ValueError(f"tutar_usd sonlu bir sayi olmalidir: {amount}")
     if amount <= 0:
         raise ValueError("tutar_usd pozitif olmalidir.")
     return float(amount)

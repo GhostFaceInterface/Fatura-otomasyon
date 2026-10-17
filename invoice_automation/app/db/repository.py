@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 import sqlite3
 
 from invoice_automation.app.constants import (
     BATCH_ELIGIBLE_STATUSES,
+    RETRYABLE_STATUSES,
+    STALE_IN_PROGRESS_ERROR_CODE,
     InvoiceStatus,
 )
 from invoice_automation.app.db.database import get_connection, initialize_database
@@ -42,77 +45,46 @@ class InvoiceRecordRepository:
     def create(self, record: InvoiceRecordCreate) -> InvoiceRecord:
         """Insert a record and return the persisted row."""
 
-        now = utc_timestamp()
         with self._connect() as connection:
-            cursor = connection.execute(
-                """
-                INSERT INTO invoice_records (
-                    batch_id,
-                    ad,
-                    soyad,
-                    tc_kimlik_no,
-                    tutar_usd,
-                    aciklama,
-                    fatura_tipi_hedef,
-                    kaynak_dosya,
-                    kaynak_satir_no,
-                    secili_mi,
-                    islem_durumu,
-                    olusturma_zamani,
-                    guncelleme_zamani
-                )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    record.batch_id,
-                    record.ad,
-                    record.soyad,
-                    record.tc_kimlik_no,
-                    record.tutar_usd,
-                    record.aciklama,
-                    record.fatura_tipi_hedef,
-                    record.kaynak_dosya,
-                    record.kaynak_satir_no,
-                    int(record.secili_mi),
-                    str(record.islem_durumu),
-                    now,
-                    now,
-                ),
-            )
-            record_id = cursor.lastrowid
+            record_id = _insert_record(connection, record, utc_timestamp())
 
         persisted = self.get(record_id)
         if persisted is None:
             raise RuntimeError("Inserted invoice record could not be loaded.")
         return persisted
 
-    def create_import_batch(self, batch: ImportBatchCreate) -> ImportBatch:
-        """Create an import/fatura period and return it."""
+    def create_import(
+        self,
+        batch: ImportBatchCreate,
+        records: list[InvoiceRecordCreate],
+    ) -> tuple[ImportBatch, list[InvoiceRecord]]:
+        """Persist an import batch and all of its records in one transaction.
+
+        Either the whole import lands or nothing does; a failure mid-way leaves no
+        half-imported fatura donemi behind.
+        """
 
         now = utc_timestamp()
         with self._connect() as connection:
-            cursor = connection.execute(
-                """
-                INSERT INTO import_batches (
-                    name,
-                    source_file_name,
-                    sheet_name,
-                    created_at,
-                    status,
-                    is_archived
-                )
-                VALUES (?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    batch.name,
-                    batch.source_file_name,
-                    batch.sheet_name,
-                    now,
-                    batch.status,
-                    int(batch.is_archived),
-                ),
-            )
-            batch_id = cursor.lastrowid
+            batch_id = _insert_import_batch(connection, batch, now)
+            record_ids = [
+                _insert_record(connection, replace(record, batch_id=batch_id), now)
+                for record in records
+            ]
+
+        persisted_batch = self.get_import_batch(batch_id)
+        if persisted_batch is None:
+            raise RuntimeError("Inserted import batch could not be loaded.")
+        persisted_records = [self.get(record_id) for record_id in record_ids]
+        if any(record is None for record in persisted_records):
+            raise RuntimeError("Inserted invoice records could not be loaded.")
+        return persisted_batch, persisted_records  # type: ignore[return-value]
+
+    def create_import_batch(self, batch: ImportBatchCreate) -> ImportBatch:
+        """Create an import/fatura period and return it."""
+
+        with self._connect() as connection:
+            batch_id = _insert_import_batch(connection, batch, utc_timestamp())
 
         persisted = self.get_import_batch(batch_id)
         if persisted is None:
@@ -418,12 +390,221 @@ class InvoiceRecordRepository:
             raise RuntimeError(f"Invoice record not found after status update: {record_id}")
         return updated
 
+    def claim_for_processing(self, record_id: int) -> InvoiceRecord | None:
+        """Atomically move an eligible record to IN_PROGRESS.
+
+        Returns the claimed record, or None when the record is not PENDING/SELECTED
+        (already processed, in progress elsewhere, or awaiting review). The single
+        conditional UPDATE is the idempotency guard against double submits.
+        """
+
+        eligible = tuple(status.value for status in BATCH_ELIGIBLE_STATUSES)
+        placeholders = ",".join("?" for _ in eligible)
+        with self._connect() as connection:
+            cursor = connection.execute(
+                f"""
+                UPDATE invoice_records
+                SET islem_durumu = ?,
+                    guncelleme_zamani = ?
+                WHERE id = ?
+                  AND islem_durumu IN ({placeholders})
+                """,
+                (InvoiceStatus.IN_PROGRESS.value, utc_timestamp(), record_id, *eligible),
+            )
+            claimed = cursor.rowcount == 1
+        return self.get(record_id) if claimed else None
+
+    def recover_stale_in_progress(self) -> int:
+        """Move records left IN_PROGRESS by a crash/restart to NEEDS_REVIEW.
+
+        Nothing can be in progress when the application boots, so these records
+        were interrupted at an unknown step and the portal must be checked by hand.
+        """
+
+        with self._connect() as connection:
+            cursor = connection.execute(
+                """
+                UPDATE invoice_records
+                SET islem_durumu = ?,
+                    secili_mi = 0,
+                    hata_kodu = ?,
+                    hata_mesaji = ?,
+                    guncelleme_zamani = ?
+                WHERE islem_durumu = ?
+                """,
+                (
+                    InvoiceStatus.NEEDS_REVIEW.value,
+                    STALE_IN_PROGRESS_ERROR_CODE,
+                    "Islem yarida kaldi (uygulama yeniden basladi). Portalda taslak olusup "
+                    "olusmadigini kontrol edip kaydi manuel olarak sonuclandirin.",
+                    utc_timestamp(),
+                    InvoiceStatus.IN_PROGRESS.value,
+                ),
+            )
+            return cursor.rowcount
+
+    def reset_failed_to_pending(self, record_ids: list[int]) -> int:
+        """Consciously return retryable failed records to PENDING.
+
+        Only statuses in RETRYABLE_STATUSES are touched; SUCCESS, SKIPPED and
+        NEEDS_REVIEW records are never reset by this action.
+        """
+
+        normalized_ids = sorted({int(record_id) for record_id in record_ids})
+        if not normalized_ids:
+            return 0
+        retryable = tuple(status.value for status in RETRYABLE_STATUSES)
+        id_placeholders = ",".join("?" for _ in normalized_ids)
+        status_placeholders = ",".join("?" for _ in retryable)
+        with self._connect() as connection:
+            cursor = connection.execute(
+                f"""
+                UPDATE invoice_records
+                SET islem_durumu = ?,
+                    secili_mi = 0,
+                    hata_kodu = NULL,
+                    hata_mesaji = NULL,
+                    guncelleme_zamani = ?
+                WHERE id IN ({id_placeholders})
+                  AND islem_durumu IN ({status_placeholders})
+                """,
+                (InvoiceStatus.PENDING.value, utc_timestamp(), *normalized_ids, *retryable),
+            )
+            return cursor.rowcount
+
+    def resolve_needs_review(self, record_id: int, *, draft_exists: bool) -> InvoiceRecord | None:
+        """Close a NEEDS_REVIEW record after the operator checked the portal.
+
+        ``draft_exists=True`` marks it SUCCESS_DRAFT_CREATED; ``False`` returns it
+        to PENDING so it can be selected again. Returns None when the record is
+        not in NEEDS_REVIEW.
+        """
+
+        if draft_exists:
+            target_status = InvoiceStatus.SUCCESS_DRAFT_CREATED
+            note = "Portalda taslak varligi manuel olarak dogrulandi."
+        else:
+            target_status = InvoiceStatus.PENDING
+            note = None
+        with self._connect() as connection:
+            cursor = connection.execute(
+                """
+                UPDATE invoice_records
+                SET islem_durumu = ?,
+                    secili_mi = 0,
+                    hata_kodu = NULL,
+                    hata_mesaji = ?,
+                    guncelleme_zamani = ?
+                WHERE id = ?
+                  AND islem_durumu = ?
+                """,
+                (
+                    target_status.value,
+                    note,
+                    utc_timestamp(),
+                    record_id,
+                    InvoiceStatus.NEEDS_REVIEW.value,
+                ),
+            )
+            resolved = cursor.rowcount == 1
+        return self.get(record_id) if resolved else None
+
+    def list_by_statuses(
+        self,
+        statuses: tuple[InvoiceStatus, ...],
+        batch_id: int | None = None,
+    ) -> list[InvoiceRecord]:
+        """List records in any of the given statuses, oldest first."""
+
+        status_values = tuple(status.value for status in statuses)
+        placeholders = ",".join("?" for _ in status_values)
+        batch_filter = "AND batch_id = ?" if batch_id is not None else ""
+        values: list[object] = [*status_values]
+        if batch_id is not None:
+            values.append(batch_id)
+        with self._connect() as connection:
+            rows = connection.execute(
+                f"""
+                SELECT *
+                FROM invoice_records
+                WHERE islem_durumu IN ({placeholders})
+                  {batch_filter}
+                ORDER BY id ASC
+                """,
+                values,
+            ).fetchall()
+        return [InvoiceRecord.from_row(row) for row in rows]
+
     def count(self) -> int:
         """Return total record count."""
 
         with self._connect() as connection:
             row = connection.execute("SELECT COUNT(*) AS total FROM invoice_records").fetchone()
         return int(row["total"])
+
+
+def _insert_record(connection: sqlite3.Connection, record: InvoiceRecordCreate, now: str) -> int:
+    cursor = connection.execute(
+        """
+        INSERT INTO invoice_records (
+            batch_id,
+            ad,
+            soyad,
+            tc_kimlik_no,
+            tutar_usd,
+            aciklama,
+            fatura_tipi_hedef,
+            kaynak_dosya,
+            kaynak_satir_no,
+            secili_mi,
+            islem_durumu,
+            olusturma_zamani,
+            guncelleme_zamani
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            record.batch_id,
+            record.ad,
+            record.soyad,
+            record.tc_kimlik_no,
+            record.tutar_usd,
+            record.aciklama,
+            record.fatura_tipi_hedef,
+            record.kaynak_dosya,
+            record.kaynak_satir_no,
+            int(record.secili_mi),
+            str(record.islem_durumu),
+            now,
+            now,
+        ),
+    )
+    return int(cursor.lastrowid)
+
+
+def _insert_import_batch(connection: sqlite3.Connection, batch: ImportBatchCreate, now: str) -> int:
+    cursor = connection.execute(
+        """
+        INSERT INTO import_batches (
+            name,
+            source_file_name,
+            sheet_name,
+            created_at,
+            status,
+            is_archived
+        )
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        (
+            batch.name,
+            batch.source_file_name,
+            batch.sheet_name,
+            now,
+            batch.status,
+            int(batch.is_archived),
+        ),
+    )
+    return int(cursor.lastrowid)
 
 
 def _record_order_clause(sort_by: str, sort_dir: str) -> str:

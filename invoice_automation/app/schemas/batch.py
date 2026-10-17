@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from invoice_automation.app.db.models import InvoiceRecord
@@ -94,6 +94,9 @@ class BatchRunReport:
     duration_seconds: float
     details: list[BatchRecordResult]
     abort_reason: str | None = None
+    needs_review_count: int = 0
+    needs_review_record_ids: list[int] = field(default_factory=list)
+    cancelled: bool = False
 
     @property
     def progress_percent(self) -> int:
@@ -123,5 +126,8 @@ class BatchRunReport:
             "duration_seconds": self.duration_seconds,
             "progress_percent": self.progress_percent,
             "abort_reason": self.abort_reason,
+            "needs_review_count": self.needs_review_count,
+            "needs_review_record_ids": self.needs_review_record_ids,
+            "cancelled": self.cancelled,
             "details": [detail.to_dict() for detail in self.details],
         }

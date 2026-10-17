@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Query
+from fastapi.responses import JSONResponse
 
 from invoice_automation.app.automation.session_manager import portal_session_manager
 from invoice_automation.app.db.repository import InvoiceRecordRepository
+from invoice_automation.app.services.batch_job_service import batch_job_manager
 from invoice_automation.app.services.batch_service import BatchService
 from invoice_automation.app.services.draft_service import SingleDraftService
-from invoice_automation.app.utils.exceptions import PortalSessionError
+from invoice_automation.app.utils.exceptions import BatchJobAlreadyRunningError, PortalSessionError
 
 router = APIRouter(prefix="/api", tags=["api"])
 
@@ -51,11 +53,52 @@ def batch_preview(batch_id: int | None = Query(default=None)) -> dict[str, objec
     return BatchService().preview(batch_id=batch_id).to_dict()
 
 
-@router.post("/batch/run")
-def run_batch(batch_id: int | None = Query(default=None)) -> dict[str, object]:
-    """Run selected eligible records and return the batch report."""
+@router.post("/batch/run", response_model=None)
+def run_batch(batch_id: int | None = Query(default=None)) -> dict[str, object] | JSONResponse:
+    """Start the batch as a background job; poll ``/api/batch/job`` for progress."""
 
-    return BatchService().run_selected_batch(batch_id=batch_id).to_dict()
+    try:
+        job = batch_job_manager.start(batch_id)
+    except (BatchJobAlreadyRunningError, PortalSessionError) as exc:
+        return JSONResponse(
+            status_code=409,
+            content={"ok": False, "error": str(exc), "job": batch_job_manager.status()},
+        )
+    return {"ok": True, "job": job}
+
+
+@router.get("/batch/job")
+def batch_job_status() -> dict[str, object]:
+    """Return progress of the active or most recent batch job."""
+
+    return {"job": batch_job_manager.status()}
+
+
+@router.post("/batch/cancel")
+def cancel_batch() -> dict[str, object]:
+    """Request cancellation of the running batch job between records."""
+
+    return {"ok": batch_job_manager.cancel(), "job": batch_job_manager.status()}
+
+
+@router.post("/records/{record_id}/retry")
+def retry_failed_record(record_id: int) -> dict[str, object]:
+    """Consciously return a retryable failed record to PENDING."""
+
+    repository = InvoiceRecordRepository()
+    reset = repository.reset_failed_to_pending([record_id]) == 1
+    record = repository.get(record_id)
+    return {"ok": reset, "record": record.to_dict() if record else None}
+
+
+@router.post("/records/{record_id}/review")
+def resolve_review_record(record_id: int, draft_exists: bool = Query(...)) -> dict[str, object]:
+    """Close a NEEDS_REVIEW record after checking the portal manually."""
+
+    repository = InvoiceRecordRepository()
+    resolved = repository.resolve_needs_review(record_id, draft_exists=draft_exists)
+    record = resolved or repository.get(record_id)
+    return {"ok": resolved is not None, "record": record.to_dict() if record else None}
 
 
 @router.get("/session/status")
@@ -91,7 +134,10 @@ def verify_session() -> dict[str, object]:
 def close_session() -> dict[str, object]:
     """Close active browser session."""
 
-    return {"ok": True, "state": portal_session_manager.close().to_dict()}
+    try:
+        return {"ok": True, "state": portal_session_manager.close().to_dict()}
+    except PortalSessionError as exc:
+        return {"ok": False, "error": str(exc), "state": portal_session_manager.state.to_dict()}
 
 
 @router.post("/draft/create")
@@ -101,5 +147,5 @@ def create_single_draft(record_id: int = Query(...)) -> dict[str, object]:
     try:
         result = SingleDraftService().create_for_record(record_id)
         return result.to_dict()
-    except ValueError as exc:
+    except (ValueError, PortalSessionError) as exc:
         return {"ok": False, "error_code": exc.__class__.__name__, "message": str(exc)}

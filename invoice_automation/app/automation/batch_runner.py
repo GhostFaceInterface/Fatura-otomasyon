@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from time import perf_counter
-from typing import Any, Protocol
+from typing import Any, Callable, Protocol
 import logging
 
+from invoice_automation.app.automation.playwright_worker import on_playwright_thread
 from invoice_automation.app.automation.portal_navigation import EArchiveNavigation
 from invoice_automation.app.automation.session_manager import (
     PortalSessionManager,
@@ -20,7 +21,7 @@ from invoice_automation.app.schemas.batch import BatchRecordResult, BatchRunRepo
 from invoice_automation.app.schemas.draft import SingleDraftServiceResult
 from invoice_automation.app.services.draft_service import SingleDraftService
 from invoice_automation.app.services.report_service import BatchReportService
-from invoice_automation.app.utils.exceptions import SessionLostError
+from invoice_automation.app.utils.exceptions import RecordNotEligibleError, SessionLostError
 from invoice_automation.app.utils.sleep_prevention import SleepPreventionGuard
 
 logger = logging.getLogger(__name__)
@@ -53,14 +54,29 @@ class BatchRunner:
         self.navigation_retry_count = navigation_retry_count or settings.navigation_retry_count
         self.sleep_prevention_factory = sleep_prevention_factory or SleepPreventionGuard
 
-    def run(self, records: list[InvoiceRecord]) -> BatchRunReport:
-        """Process selected records in deterministic order and return a report."""
+    @on_playwright_thread
+    def run(
+        self,
+        records: list[InvoiceRecord],
+        *,
+        progress_callback: Callable[[BatchRecordResult | None, InvoiceRecord | None], None] | None = None,
+        should_cancel: Callable[[], bool] | None = None,
+    ) -> BatchRunReport:
+        """Process selected records in deterministic order and return a report.
+
+        ``progress_callback(last_detail, next_record)`` is invoked before each
+        record and after each result. ``should_cancel`` is polled between records;
+        the record currently on the portal is always finished first.
+        """
 
         started_at = self._utc_timestamp()
         started_timer = perf_counter()
         details: list[BatchRecordResult] = []
         aborted_due_to_session_loss = False
         abort_reason: str | None = None
+        cancelled = False
+        notify = progress_callback or (lambda _detail, _record: None)
+        cancel_requested = should_cancel or (lambda: False)
 
         logger.info("Batch basladi | selected_count=%s", len(records))
 
@@ -81,6 +97,16 @@ class BatchRunner:
 
         with self.sleep_prevention_factory():
             for index, record in enumerate(records, start=1):
+                if cancel_requested():
+                    cancelled = True
+                    logger.warning(
+                        "Batch kullanici istegiyle durduruldu | processed=%s remaining=%s",
+                        len(details),
+                        len(records) - index + 1,
+                    )
+                    break
+
+                notify(None, record)
                 record_started_at = self._utc_timestamp()
                 logger.info(
                     "Batch kayit isleme basladi | index=%s total=%s record_id=%s tc=%s",
@@ -90,10 +116,21 @@ class BatchRunner:
                     record.tc_kimlik_no,
                 )
 
-                result = self.draft_service.create_for_record(record.id)
+                try:
+                    result = self.draft_service.create_for_record(record.id)
+                except RecordNotEligibleError as exc:
+                    # Status changed since selection (e.g. processed by another
+                    # request); the portal was not touched, so just move on.
+                    logger.warning(
+                        "Batch kaydi atlandi; islenmeye uygun degil | record_id=%s reason=%s",
+                        record.id,
+                        exc,
+                    )
+                    continue
                 record_ended_at = self._utc_timestamp()
                 detail = self._detail_from_result(result, record_started_at, record_ended_at)
                 details.append(detail)
+                notify(detail, None)
 
                 logger.info(
                     "Batch kayit sonucu | index=%s total=%s record_id=%s status=%s error_code=%s screenshot=%s",
@@ -135,6 +172,7 @@ class BatchRunner:
             started_timer=started_timer,
             aborted_due_to_session_loss=aborted_due_to_session_loss,
             abort_reason=abort_reason,
+            cancelled=cancelled,
         )
 
     def _ensure_session_ready(self) -> Any:
@@ -221,6 +259,7 @@ class BatchRunner:
         started_timer: float,
         aborted_due_to_session_loss: bool,
         abort_reason: str | None,
+        cancelled: bool = False,
     ) -> BatchRunReport:
         ended_at = self._utc_timestamp()
         report = self.report_service.build_report(
@@ -231,15 +270,18 @@ class BatchRunner:
             duration_seconds=perf_counter() - started_timer,
             aborted_due_to_session_loss=aborted_due_to_session_loss,
             abort_reason=abort_reason,
+            cancelled=cancelled,
         )
         logger.info(
-            "Batch bitti | selected=%s processed=%s success=%s skipped=%s failed=%s aborted=%s abort_reason=%s",
+            "Batch bitti | selected=%s processed=%s success=%s skipped=%s failed=%s needs_review=%s aborted=%s cancelled=%s abort_reason=%s",
             report.total_selected,
             report.total_processed,
             report.success_count,
             report.skipped_count,
             report.failed_count,
+            report.needs_review_count,
             report.aborted_count,
+            report.cancelled,
             report.abort_reason,
         )
         return report

@@ -46,9 +46,6 @@ ON invoice_records (islem_durumu);
 CREATE INDEX IF NOT EXISTS idx_invoice_records_tckn
 ON invoice_records (tc_kimlik_no);
 
-CREATE INDEX IF NOT EXISTS idx_invoice_records_batch_id
-ON invoice_records (batch_id);
-
 CREATE INDEX IF NOT EXISTS idx_import_batches_created_at
 ON import_batches (created_at);
 """
@@ -82,6 +79,8 @@ def _run_lightweight_migrations(connection: sqlite3.Connection) -> None:
     }
     if "batch_id" not in invoice_columns:
         connection.execute("ALTER TABLE invoice_records ADD COLUMN batch_id INTEGER")
-        connection.execute(
-            "CREATE INDEX IF NOT EXISTS idx_invoice_records_batch_id ON invoice_records (batch_id)"
-        )
+    # Kept out of SCHEMA_SQL: on a pre-batch_id database the column only exists
+    # after the ALTER above, so creating the index earlier aborts startup.
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS idx_invoice_records_batch_id ON invoice_records (batch_id)"
+    )

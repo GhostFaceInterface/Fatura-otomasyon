@@ -113,7 +113,12 @@ Yaygin statusler:
 - `FAILED_TURMOB_SERVICE_ERROR`: Turmob sorgusunda servis hatasi.
 - `SKIPPED_EFATURA_MUKELLEFI`: kisi e-Fatura mukellefi.
 - `FAILED_NAME_MISMATCH`: Turmob ad/soyad lokal kayitla eslesmedi.
-- `FAILED_PORTAL_TIMEOUT`: portal beklenen yaniti zamaninda vermedi.
+- `FAILED_PORTAL_TIMEOUT`: portal beklenen yaniti zamaninda vermedi (Taslak Kaydet oncesi).
+- `NEEDS_REVIEW`: Taslak Kaydet tiklandi ama sonuc dogrulanamadi ya da islem yarida kaldi. Portaldaki Taslaklar listesini kontrol edin; kayit ekranindaki "Kontrol ve yeniden deneme" kartinda "Taslak var" veya "Taslak yok" ile sonuclandirin. Bu kayitlar otomatik yeniden denenmez.
+
+Hatali kayitlari tekrar denemek icin kayit ekranindaki "Kontrol ve yeniden deneme" kartindan "Yeniden denemeye al" kullanin; kayit `PENDING` olur ve tekrar secilebilir.
+
+Toplu islem arka planda calisir: baslattiktan sonra sayfa ilerlemeyi otomatik gunceller, ayni anda tek islem calisabilir ve "Islemi durdur" ile portalda islenen kayit bittikten sonra durdurulabilir.
 
 ## 9. Tek Kayit POC
 

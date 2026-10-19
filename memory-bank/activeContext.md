@@ -120,3 +120,11 @@ Toplu taslak guvenilirlik sertlestirmesi (2026-10-17, branch `fix/batch-reliabil
 - Gercek portala karsi hicbir sey calistirilmadi; dogrulama birim testleri ve gecici DB ile 8011 portunda route smoke testiyle yapildi.
 
 Sonraki adim: canli pilotta batch job ilerleme ekranini, durdurma davranisini ve NEEDS_REVIEW akisini kucuk bir kayit grubuyla gozlemlemek.
+
+Ad/soyad harf toleransi (branch `feat/name-vowel-tolerance`):
+
+- Kullanici istegi: Excel'e isim yazarken yapilan `ı/i`, `u/ü`, `o/ö` hatalari fatura kesimine engel olmamali.
+- Birebir normalize eslesme olmazsa `normalize_person_name_tolerant` ile ikinci karsilastirma yapilir; bu katman NFC uygular ve `İ/I/ı -> i`, `Ü/ü -> u`, `Ö/ö -> o` esler.
+- Toleransla gecen kayitta `Ad/soyad i/u/o harf toleransiyla eslesti` WARNING logu source ve turmob degerleriyle yazilir.
+- `ş/s`, `ç/c`, `ğ/g`, eksik/fazla harf ve farkli isim hala `FAILED_NAME_MISMATCH`. Kullanici sadece alti harfi saydi; ş/ç/ğ toleransi eklenmeden once kullaniciya sorulmali.
+- Ornek: `Işık` / `Isik` ş/s farki nedeniyle hala uyusmazliktir.

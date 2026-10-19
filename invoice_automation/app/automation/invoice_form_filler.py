@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Any
 import logging
 import re
+import unicodedata
 
 from invoice_automation.app.automation.portal_selectors import PortalSelectors, portal_selectors
 from invoice_automation.app.config import settings
@@ -197,8 +198,11 @@ class InvoiceFormFiller:
         normalized_source = normalize_person_name(source_full_name)
         normalized_turmob = normalize_person_name(turmob_full_name)
         matched = normalized_source == normalized_turmob
+        tolerant_matched = matched or (
+            normalize_person_name_tolerant(source_full_name) == normalize_person_name_tolerant(turmob_full_name)
+        )
         logger.info(
-            "Turmob ad soyad kontrolu | record_id=%s tc=%s source=%s turmob=%s normalized_source=%s normalized_turmob=%s matched=%s",
+            "Turmob ad soyad kontrolu | record_id=%s tc=%s source=%s turmob=%s normalized_source=%s normalized_turmob=%s matched=%s tolerant_matched=%s",
             form_data.record_id,
             form_data.tc_kimlik_no,
             source_full_name,
@@ -206,8 +210,19 @@ class InvoiceFormFiller:
             normalized_source,
             normalized_turmob,
             matched,
+            tolerant_matched,
         )
         if matched:
+            return
+        if tolerant_matched:
+            # Excel yazim hatasi toleransi: sadece i/ı, u/ü, o/ö farki kabul edilir.
+            logger.warning(
+                "Ad/soyad i/u/o harf toleransiyla eslesti, fatura devam ediyor | record_id=%s tc=%s source=%s turmob=%s",
+                form_data.record_id,
+                form_data.tc_kimlik_no,
+                source_full_name,
+                turmob_full_name,
+            )
             return
 
         screenshot_path = capture_error_screenshot(page, form_data.record_id, "name_mismatch")
@@ -343,3 +358,26 @@ def normalize_person_name(value: str) -> str:
     """Normalize person names for source-vs-Turmob comparison."""
 
     return re.sub(r"\s+", " ", str(value).strip().casefold())
+
+
+# Excel'e yazarken sik yapilan Turkce/Ingilizce karakter hatalari icin esdeger harf gruplari.
+# Sadece i/ı/I/İ, u/ü/U/Ü ve o/ö/O/Ö birbirine esit sayilir; ş/s, ç/c, ğ/g farki uyusmazlik kalir.
+_PERSON_NAME_VOWEL_FOLD = str.maketrans(
+    {
+        "İ": "i",
+        "I": "i",
+        "ı": "i",
+        "Ü": "u",
+        "ü": "u",
+        "Ö": "o",
+        "ö": "o",
+    }
+)
+
+
+def normalize_person_name_tolerant(value: str) -> str:
+    """Normalize person names treating i/ı, u/ü and o/ö variants as equal."""
+
+    # NFC: ayrik yazilmis "I + U+0307" veya "u + U+0308" gibi formlar tek harfe birlestirilir.
+    composed = unicodedata.normalize("NFC", str(value))
+    return normalize_person_name(composed.translate(_PERSON_NAME_VOWEL_FOLD))

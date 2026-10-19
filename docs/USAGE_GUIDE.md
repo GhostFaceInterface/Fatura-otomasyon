@@ -112,7 +112,7 @@ Yaygin statusler:
 - `FAILED_INVALID_TCKN`: TCKN/VKN verisi veya portal validasyonu gecersiz.
 - `FAILED_TURMOB_SERVICE_ERROR`: Turmob sorgusunda servis hatasi.
 - `SKIPPED_EFATURA_MUKELLEFI`: kisi e-Fatura mukellefi.
-- `FAILED_NAME_MISMATCH`: Turmob ad/soyad lokal kayitla eslesmedi.
+- `FAILED_NAME_MISMATCH`: Turmob ad/soyad lokal kayitla eslesmedi. Buyuk/kucuk harf ve bosluk farki ile sadece `ı/i/İ/I`, `u/ü`, `o/ö` farki tolere edilir (ornek: Excel'de `Ozturk`, portalda `Öztürk`). Toleransla gecen kayit fail olmaz; `data/logs/app.log` icine `harf toleransiyla eslesti` uyarisi iki degerle birlikte yazilir. `ş/s`, `ç/c`, `ğ/g`, eksik/fazla harf veya farkli isim yine uyusmazliktir.
 - `FAILED_PORTAL_TIMEOUT`: portal beklenen yaniti zamaninda vermedi (Taslak Kaydet oncesi).
 - `NEEDS_REVIEW`: Taslak Kaydet tiklandi ama sonuc dogrulanamadi ya da islem yarida kaldi. Portaldaki Taslaklar listesini kontrol edin; kayit ekranindaki "Kontrol ve yeniden deneme" kartinda "Taslak var" veya "Taslak yok" ile sonuclandirin. Bu kayitlar otomatik yeniden denenmez.
 

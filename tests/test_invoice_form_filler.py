@@ -1,6 +1,12 @@
+import logging
+
 import pytest
 
-from invoice_automation.app.automation.invoice_form_filler import InvoiceFormData, InvoiceFormFiller
+from invoice_automation.app.automation.invoice_form_filler import (
+    InvoiceFormData,
+    InvoiceFormFiller,
+    normalize_person_name_tolerant,
+)
 from invoice_automation.app.utils.exceptions import NameMismatchError
 
 
@@ -150,3 +156,122 @@ def test_invoice_form_filler_skips_turmob_when_tax_scheme_is_prefilled() -> None
     assert ("input_value", "#txtTaxSchemeName", 30_000) in page.actions
     assert ("click_text", "Türmob Müsteri Sorgula", 30_000) not in page.actions
     assert ("fill", "#MalAdi", "YURT DIŞI KONAKLAMA BEDELİ") in page.actions
+
+
+def _name_form_data(ad: str, soyad: str) -> InvoiceFormData:
+    return InvoiceFormData(
+        record_id=1,
+        ad=ad,
+        soyad=soyad,
+        tc_kimlik_no="12345678901",
+        tutar_usd=1000.0,
+        mal_hizmet_adi="YURT DIŞI KONAKLAMA BEDELİ",
+        il="**",
+        ilce="**",
+        para_birimi="USD",
+        kdv_orani="0",
+        istisna_target_text="302-11/1-a Hizmet ihracatı",
+        istisna_option_value=None,
+    )
+
+
+@pytest.mark.parametrize(
+    ("source", "portal"),
+    [
+        ("Işık", "Işik"),
+        ("IŞIK", "Işık"),
+        ("Gül", "Gul"),
+        ("Öztürk", "Ozturk"),
+        ("ILKAY", "İlkay"),
+        ("İLKAY", "ılkay"),
+        ("ÜMIT", "Ümit"),
+        ("ÖMÜR ÜNAL", "omur unal"),
+        ("  Gül   Öztürk ", "gul ozturk"),
+        ("I\u0307lkay", "İlkay"),
+        ("Gu\u0308l", "Gül"),
+    ],
+)
+def test_normalize_person_name_tolerant_accepts_i_u_o_variants(source: str, portal: str) -> None:
+    assert normalize_person_name_tolerant(source) == normalize_person_name_tolerant(portal)
+
+
+@pytest.mark.parametrize(
+    ("source", "portal"),
+    [
+        ("Şahin", "Sahin"),
+        ("Işık", "Isik"),
+        ("Çelik", "Celik"),
+        ("Doğan", "Dogan"),
+        ("Ali", "Alı\u0307m"),
+        ("Ali", "Alı\u0307"),
+        ("Ali", "Alii"),
+        ("Gül", "Gülü"),
+        ("Ali Yilmaz", "Mehmet Kaya"),
+        ("Ozan", "Ezan"),
+    ],
+)
+def test_normalize_person_name_tolerant_rejects_other_differences(source: str, portal: str) -> None:
+    assert normalize_person_name_tolerant(source) != normalize_person_name_tolerant(portal)
+
+
+@pytest.mark.parametrize(
+    ("ad", "soyad", "portal_ad", "portal_soyad"),
+    [
+        ("Isik", "Ozturk", "ISIK", "ÖZTÜRK"),
+        ("Gul", "Yilmaz", "Gül", "Yılmaz"),
+        ("ILKAY", "Uslu", "İlkay", "Üslü"),
+    ],
+)
+def test_invoice_form_filler_accepts_turmob_name_with_vowel_tolerance(
+    caplog: pytest.LogCaptureFixture,
+    ad: str,
+    soyad: str,
+    portal_ad: str,
+    portal_soyad: str,
+) -> None:
+    page = FakePage()
+    page.values_by_selector["#txtPerson_FirstName"] = portal_ad
+    page.values_by_selector["#txtPerson_FamilyName"] = portal_soyad
+
+    with caplog.at_level(logging.INFO, logger="invoice_automation.app.automation.invoice_form_filler"):
+        InvoiceFormFiller(timeout_ms=30_000).fill_form(page, _name_form_data(ad, soyad))
+
+    assert ("fill", 'input[name="Price_Amount"]', "1000") in page.actions
+    tolerance_logs = [record for record in caplog.records if "harf toleransiyla eslesti" in record.getMessage()]
+    assert len(tolerance_logs) == 1
+    assert tolerance_logs[0].levelno == logging.WARNING
+    message = tolerance_logs[0].getMessage()
+    assert f"source={ad} {soyad}" in message
+    assert f"turmob={portal_ad} {portal_soyad}" in message
+
+
+def test_invoice_form_filler_exact_name_match_does_not_log_tolerance(caplog: pytest.LogCaptureFixture) -> None:
+    page = FakePage()
+
+    with caplog.at_level(logging.INFO, logger="invoice_automation.app.automation.invoice_form_filler"):
+        InvoiceFormFiller(timeout_ms=30_000).fill_form(page, _name_form_data("ali", "YILMAZ"))
+
+    assert not [record for record in caplog.records if "harf toleransiyla eslesti" in record.getMessage()]
+
+
+@pytest.mark.parametrize(
+    ("ad", "soyad", "portal_ad", "portal_soyad"),
+    [
+        ("Ali", "Sahin", "Ali", "Şahin"),
+        ("Ali", "Celik", "Ali", "Çelik"),
+        ("Ali", "Yilmaz", "Ali", "Yilmazz"),
+    ],
+)
+def test_invoice_form_filler_still_rejects_non_vowel_name_differences(
+    ad: str,
+    soyad: str,
+    portal_ad: str,
+    portal_soyad: str,
+) -> None:
+    page = FakePage()
+    page.values_by_selector["#txtPerson_FirstName"] = portal_ad
+    page.values_by_selector["#txtPerson_FamilyName"] = portal_soyad
+
+    with pytest.raises(NameMismatchError):
+        InvoiceFormFiller(timeout_ms=30_000).fill_form(page, _name_form_data(ad, soyad))
+

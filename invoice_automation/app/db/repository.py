@@ -16,10 +16,12 @@ from invoice_automation.app.db.database import get_connection, initialize_databa
 from invoice_automation.app.db.models import (
     ImportBatch,
     ImportBatchCreate,
+    ImportBatchSummary,
     InvoiceRecord,
     InvoiceRecordCreate,
     utc_timestamp,
 )
+from invoice_automation.app.utils.exceptions import DeletionBlockedError
 
 
 SELECTABLE_STATUSES = (InvoiceStatus.PENDING.value, InvoiceStatus.SELECTED.value)
@@ -30,6 +32,11 @@ RECORD_SORT_COLUMNS = {
     "tc_kimlik_no": "tc_kimlik_no",
     "tutar_usd": "tutar_usd",
 }
+
+
+_UNASSIGNED_RECORD_FILTER = (
+    "(batch_id IS NULL OR batch_id NOT IN (SELECT id FROM import_batches))"
+)
 
 
 class InvoiceRecordRepository:
@@ -534,6 +541,141 @@ class InvoiceRecordRepository:
                 values,
             ).fetchall()
         return [InvoiceRecord.from_row(row) for row in rows]
+
+    def list_import_batch_summaries(self) -> list[ImportBatchSummary]:
+        """List every import/fatura period with record counts, newest first."""
+
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT
+                    b.*,
+                    COUNT(r.id) AS record_count,
+                    COALESCE(SUM(r.tutar_usd), 0) AS total_usd,
+                    COALESCE(SUM(r.islem_durumu IN (?, ?)), 0) AS waiting_count,
+                    COALESCE(SUM(r.islem_durumu = ?), 0) AS success_count,
+                    COALESCE(SUM(
+                        r.islem_durumu LIKE 'FAILED_%'
+                        OR r.islem_durumu LIKE 'SKIPPED_%'
+                        OR r.islem_durumu LIKE 'ABORTED_%'
+                    ), 0) AS failed_count,
+                    COALESCE(SUM(r.islem_durumu = ?), 0) AS review_count,
+                    COALESCE(SUM(r.islem_durumu = ?), 0) AS in_progress_count
+                FROM import_batches AS b
+                LEFT JOIN invoice_records AS r ON r.batch_id = b.id
+                GROUP BY b.id
+                ORDER BY b.id DESC
+                """,
+                (
+                    InvoiceStatus.PENDING.value,
+                    InvoiceStatus.SELECTED.value,
+                    InvoiceStatus.SUCCESS_DRAFT_CREATED.value,
+                    InvoiceStatus.NEEDS_REVIEW.value,
+                    InvoiceStatus.IN_PROGRESS.value,
+                ),
+            ).fetchall()
+        return [
+            ImportBatchSummary(
+                batch=ImportBatch.from_row(row),
+                record_count=int(row["record_count"]),
+                total_usd=float(row["total_usd"]),
+                waiting_count=int(row["waiting_count"]),
+                success_count=int(row["success_count"]),
+                failed_count=int(row["failed_count"]),
+                review_count=int(row["review_count"]),
+                in_progress_count=int(row["in_progress_count"]),
+            )
+            for row in rows
+        ]
+
+    def count_unassigned_records(self) -> int:
+        """Count records that belong to no existing fatura period (legacy imports)."""
+
+        with self._connect() as connection:
+            row = connection.execute(
+                f"""
+                SELECT COUNT(*) AS total
+                FROM invoice_records
+                WHERE {_UNASSIGNED_RECORD_FILTER}
+                """
+            ).fetchone()
+        return int(row["total"])
+
+    def delete_records(self, record_ids: list[int], batch_id: int | None = None) -> int:
+        """Delete local records and return the deleted count.
+
+        IN_PROGRESS records are never deleted: the portal may be working on them.
+        Drafts already created on the portal are not affected.
+        """
+
+        normalized_ids = sorted({int(record_id) for record_id in record_ids})
+        if not normalized_ids:
+            return 0
+        id_placeholders = ",".join("?" for _ in normalized_ids)
+        batch_filter = "AND batch_id = ?" if batch_id is not None else ""
+        values: list[object] = [*normalized_ids, InvoiceStatus.IN_PROGRESS.value]
+        if batch_id is not None:
+            values.append(batch_id)
+        with self._connect() as connection:
+            cursor = connection.execute(
+                f"""
+                DELETE FROM invoice_records
+                WHERE id IN ({id_placeholders})
+                  AND islem_durumu != ?
+                  {batch_filter}
+                """,
+                values,
+            )
+            return cursor.rowcount
+
+    def delete_import_batch(self, batch_id: int) -> int | None:
+        """Delete a fatura period and all of its records in one transaction.
+
+        Returns the deleted record count, or None when the period does not exist.
+        Raises DeletionBlockedError when one of its records is IN_PROGRESS.
+        """
+
+        with self._connect() as connection:
+            batch_row = connection.execute(
+                "SELECT id FROM import_batches WHERE id = ?",
+                (batch_id,),
+            ).fetchone()
+            if batch_row is None:
+                return None
+            in_progress = connection.execute(
+                """
+                SELECT COUNT(*) AS total
+                FROM invoice_records
+                WHERE batch_id = ?
+                  AND islem_durumu = ?
+                """,
+                (batch_id, InvoiceStatus.IN_PROGRESS.value),
+            ).fetchone()
+            if int(in_progress["total"]):
+                raise DeletionBlockedError(
+                    "Bu donemde su anda islenen kayit var; islem bitmeden donem silinemez."
+                )
+            cursor = connection.execute(
+                "DELETE FROM invoice_records WHERE batch_id = ?",
+                (batch_id,),
+            )
+            deleted_records = cursor.rowcount
+            connection.execute("DELETE FROM import_batches WHERE id = ?", (batch_id,))
+        return deleted_records
+
+    def delete_unassigned_records(self) -> int:
+        """Delete records that belong to no existing fatura period."""
+
+        with self._connect() as connection:
+            cursor = connection.execute(
+                f"""
+                DELETE FROM invoice_records
+                WHERE {_UNASSIGNED_RECORD_FILTER}
+                  AND islem_durumu != ?
+                """,
+                (InvoiceStatus.IN_PROGRESS.value,),
+            )
+            return cursor.rowcount
 
     def count(self) -> int:
         """Return total record count."""

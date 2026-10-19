@@ -38,3 +38,5 @@
 - Durum degerleri `InvoiceStatus` enum'u ile merkezi tutulur.
 - Portal otomasyonu `automation/` katmaninda Playwright ile ayrilir.
 - Kayit bazli hatalar batch'i durdurmaz; session-level veya temiz form reset hatalari batch'i guvenli durdurur.
+- Yerel veri silme `RecordCleanupService` uzerinden yapilir: IN_PROGRESS kayitlar ve aktif batch job'un donemi silinemez; silme portal taslaklarini etkilemez.
+- Yikici UI aksiyonlari `data-confirm` ile onay ister; ortak handler `base.html` icindedir.

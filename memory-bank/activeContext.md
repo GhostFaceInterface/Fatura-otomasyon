@@ -128,3 +128,14 @@ Ad/soyad harf toleransi (branch `feat/name-vowel-tolerance`):
 - Toleransla gecen kayitta `Ad/soyad i/u/o harf toleransiyla eslesti` WARNING logu source ve turmob degerleriyle yazilir.
 - `ş/s`, `ç/c`, `ğ/g`, eksik/fazla harf ve farkli isim hala `FAILED_NAME_MISMATCH`. Kullanici sadece alti harfi saydi; ş/ç/ğ toleransi eklenmeden once kullaniciya sorulmali.
 - Ornek: `Işık` / `Isik` ş/s farki nedeniyle hala uyusmazliktir.
+
+Veritabani goruntuleme ve silme (2026-10-19, branch `fix/batch-reliability`):
+
+- Ihtiyac: kullanici yanlis dosyayi import etti; mevcut DB'yi gorup yanlis donemi/kayitlari silebilmeli.
+- Yeni `/database` ekrani (navbar "Veritabani"): donem bazli kayit sayisi, toplam USD, bekleyen/basarili/hatali-atlanan/kontrol sayilari, DB dosya yolu, doneme bagli olmayan (eski) kayitlar.
+- Donem silme (`POST /batches/{id}/delete`, `DELETE /api/batches/{id}`) donemi ve tum kayitlarini tek transaction'da siler.
+- Kayit silme: kayit ekraninda satir bazli "Sil" ve secili kayitlar icin "Secilileri sil" (`POST /records/{id}/delete`, `POST /records/delete`, `DELETE /api/records/{id}`).
+- Import sonuc ekraninda "Yanlis dosya: importu geri al" butonu yeni donemi siler.
+- Guvenlik: IN_PROGRESS kayit asla silinmez; IN_PROGRESS kaydi olan donem silinmez; aktif batch job'un donemi `RecordCleanupService` tarafindan `DeletionBlockedError` ile reddedilir.
+- Silme sadece yerel SQLite'i etkiler; portaldaki taslaklar silinmez. SUCCESS/NEEDS_REVIEW iceren donem/kayit silinirken onay mesaji mukerrer taslak riskini uyarir.
+- Ortak `data-confirm` onay handler'i `base.html` icinde; buton uzerindeki `data-confirm` formdakini ezer.

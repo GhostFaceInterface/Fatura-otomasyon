@@ -35,6 +35,9 @@
             <li class="nav-item">
               <a class="nav-link {% if current_path.startswith('/batch') %}active{% endif %}" href="/batch">Taslak Oluştur</a>
             </li>
+            <li class="nav-item">
+              <a class="nav-link {% if current_path.startswith('/database') %}active{% endif %}" href="/database">Veritabanı</a>
+            </li>
           </ul>
         </div>
       </div>
@@ -76,5 +79,24 @@
     </main>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+      // Forms or submit buttons with data-confirm ask before submitting; the
+      // button's message wins so one form can carry several confirmed actions.
+      document.addEventListener("submit", (event) => {
+        const form = event.target;
+        const message = event.submitter?.dataset.confirm || form.dataset.confirm;
+        if (!message) {
+          return;
+        }
+        if (!window.confirm(message)) {
+          event.preventDefault();
+          return;
+        }
+        form.querySelectorAll("button[type=submit]").forEach((button) => { button.disabled = true; });
+        if (event.submitter) {
+          event.submitter.disabled = true;
+        }
+      });
+    </script>
   </body>
 </html>

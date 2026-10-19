@@ -19,11 +19,13 @@ from invoice_automation.app.db.repository import InvoiceRecordRepository
 from invoice_automation.app.schemas.batch import BatchPreview
 from invoice_automation.app.services.batch_job_service import batch_job_manager
 from invoice_automation.app.services.batch_service import BatchService
+from invoice_automation.app.services.cleanup_service import RecordCleanupService
 from invoice_automation.app.services.draft_service import SingleDraftService
 from invoice_automation.app.services.import_service import ImportService, normalize_column_name
 from invoice_automation.app.services.selection_service import SelectionService
 from invoice_automation.app.utils.exceptions import (
     BatchJobAlreadyRunningError,
+    DeletionBlockedError,
     ImportValidationError,
     PortalSessionError,
 )
@@ -229,6 +231,8 @@ def records(
                 else []
             ),
             "record_action_message": request.query_params.get("record_action"),
+            "record_action_error": request.query_params.get("error"),
+            "deleted_count": request.query_params.get("deleted"),
         },
     )
 
@@ -301,6 +305,71 @@ def resolve_review_record(
         resolved is not None,
     )
     return _redirect_to_records(batch_id, "review_ok" if resolved else "review_rejected")
+
+
+@router.post("/records/delete")
+def delete_selected_records(
+    batch_id: int = Form(...),
+    selected_record_ids: list[int] | None = Form(default=None),
+) -> RedirectResponse:
+    """Delete the records checked on the records screen."""
+
+    return _delete_records(batch_id, selected_record_ids or [])
+
+
+@router.post("/records/{record_id}/delete")
+def delete_record(record_id: int, batch_id: int = Form(...)) -> RedirectResponse:
+    """Delete one record of the active fatura period."""
+
+    return _delete_records(batch_id, [record_id])
+
+
+@router.get("/database", response_class=HTMLResponse)
+def database(request: Request) -> HTMLResponse:
+    """Render an overview of every fatura period stored in the local database."""
+
+    repository = InvoiceRecordRepository()
+    summaries = repository.list_import_batch_summaries()
+    job = batch_job_manager.current_job()
+    return templates.TemplateResponse(
+        "database.html",
+        {
+            "request": request,
+            "summaries": summaries,
+            "total_records": repository.count(),
+            "total_usd": sum(summary.total_usd for summary in summaries),
+            "unassigned_count": repository.count_unassigned_records(),
+            "database_path": settings.database_path,
+            "running_batch_id": job.batch_id if job is not None and job.is_active else None,
+            "db_action": request.query_params.get("db_action"),
+            "deleted_count": request.query_params.get("deleted"),
+            "error": request.query_params.get("error"),
+        },
+    )
+
+
+@router.post("/batches/{batch_id}/delete")
+def delete_batch(batch_id: int) -> RedirectResponse:
+    """Delete a fatura period and all of its records."""
+
+    try:
+        deleted = RecordCleanupService().delete_batch(batch_id)
+    except DeletionBlockedError as exc:
+        return _redirect_to_database("blocked", error=str(exc))
+    if deleted is None:
+        return _redirect_to_database("batch_missing")
+    return _redirect_to_database("batch_deleted", deleted=deleted)
+
+
+@router.post("/database/unassigned/delete")
+def delete_unassigned_records() -> RedirectResponse:
+    """Delete records that belong to no fatura period."""
+
+    try:
+        deleted = RecordCleanupService().delete_unassigned_records()
+    except DeletionBlockedError as exc:
+        return _redirect_to_database("blocked", error=str(exc))
+    return _redirect_to_database("unassigned_deleted", deleted=deleted)
 
 
 @router.get("/batch", response_class=HTMLResponse)
@@ -563,9 +632,22 @@ def _render_batch(
     )
 
 
-def _redirect_to_records(batch_id: int, record_action: str) -> RedirectResponse:
-    query = urlencode({"batch_id": batch_id, "record_action": record_action})
+def _redirect_to_records(batch_id: int, record_action: str, **extra: object) -> RedirectResponse:
+    query = urlencode({"batch_id": batch_id, "record_action": record_action, **extra})
     return RedirectResponse(url=f"/records?{query}", status_code=303)
+
+
+def _redirect_to_database(db_action: str, **extra: object) -> RedirectResponse:
+    query = urlencode({"db_action": db_action, **extra})
+    return RedirectResponse(url=f"/database?{query}", status_code=303)
+
+
+def _delete_records(batch_id: int, record_ids: list[int]) -> RedirectResponse:
+    try:
+        deleted = RecordCleanupService().delete_records(record_ids, batch_id=batch_id)
+    except DeletionBlockedError as exc:
+        return _redirect_to_records(batch_id, "delete_blocked", error=str(exc))
+    return _redirect_to_records(batch_id, "delete_ok" if deleted else "delete_none", deleted=deleted)
 
 
 def _empty_batch_preview() -> BatchPreview:

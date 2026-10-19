@@ -40,6 +40,7 @@
 - Basarili taslak sayisi kontrol edildi mi?
 - Failed ve skipped sayilari kontrol edildi mi?
 - `FAILED_NAME_MISMATCH` kayitlari manuel incelendi mi?
+- `app.log` icindeki `harf toleransiyla eslesti` uyarilari (ı/i, u/ü, o/ö farkiyla gecen isimler) gozden gecirildi mi?
 - `FAILED_INVALID_TCKN` kayitlari kaynak veriyle karsilastirildi mi?
 - `SKIPPED_EFATURA_MUKELLEFI` kayitlari ayri not edildi mi?
 - Screenshot path olan hatalar incelendi mi?

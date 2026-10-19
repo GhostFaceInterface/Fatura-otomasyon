@@ -349,7 +349,7 @@ Batch sonunda başarılı, hatalı, atlanan ve durdurulan kayıtlar özetlenir. 
 | ![progress](https://img.shields.io/badge/IN_PROGRESS-running-2563EB) | `IN_PROGRESS` | Kayıt işleniyor. |
 | ![success](https://img.shields.io/badge/SUCCESS_DRAFT_CREATED-success-16A34A) | `SUCCESS_DRAFT_CREATED` | Taslak fatura başarıyla oluşturuldu. |
 | ![invalid](https://img.shields.io/badge/FAILED_INVALID_TCKN-invalid-DC2626) | `FAILED_INVALID_TCKN` | Kimlik numarası portal veya format doğrulamasından geçmedi. |
-| ![name](https://img.shields.io/badge/FAILED_NAME_MISMATCH-mismatch-B91C1C) | `FAILED_NAME_MISMATCH` | Portal/Turmob ad-soyad bilgisi lokal kayıtla eşleşmedi. |
+| ![name](https://img.shields.io/badge/FAILED_NAME_MISMATCH-mismatch-B91C1C) | `FAILED_NAME_MISMATCH` | Portal/Turmob ad-soyad bilgisi lokal kayıtla eşleşmedi. Büyük/küçük harf ve fazla boşluk farkı ile yalnızca `ı/i/İ/I`, `u/ü`, `o/ö` farkları tolere edilir (ör. `Gul` = `Gül`); bu durumda fatura devam eder ve `app.log`'a uyarı yazılır. `ş/s`, `ç/c`, `ğ/g`, eksik/fazla harf gibi diğer farklar hâlâ uyuşmazlıktır. |
 | ![turmob](https://img.shields.io/badge/FAILED_TURMOB_SERVICE_ERROR-service_error-9333EA) | `FAILED_TURMOB_SERVICE_ERROR` | Turmob servisinden hata alındı. |
 | ![skip](https://img.shields.io/badge/SKIPPED_EFATURA_MUKELLEFI-skipped-0891B2) | `SKIPPED_EFATURA_MUKELLEFI` | Kişi e-Fatura mükellefi olduğu için e-Arşiv taslak süreci atlandı. |
 | ![timeout](https://img.shields.io/badge/FAILED_PORTAL_TIMEOUT-timeout-EA580C) | `FAILED_PORTAL_TIMEOUT` | Portal beklenen sürede yanıt vermedi. |

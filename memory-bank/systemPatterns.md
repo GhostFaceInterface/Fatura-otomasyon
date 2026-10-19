@@ -15,6 +15,7 @@
 - KDV 0 sonrasi gelen istisna bilgi mesaji `PortalErrorDetector` tarafindan zararsiz portal bilgisi olarak kapatilip yoksayilir.
 - TCKN sonrasi `#txtTaxSchemeName` doluysa Turmob sorgusu atlanir; mevcut portal ad/soyad alanlariyla dogrulama devam eder.
 - Turmob sonrasi ad/soyad kontrolu `InvoiceFormFiller` icinde yapilir; uyusmazlik typed exception ile status'a map edilir.
+- Ad/soyad karsilastirmasi iki katmanlidir: once `normalize_person_name` (strip + bosluk + casefold) ile birebir, olmazsa `normalize_person_name_tolerant` (NFC + `ı/İ/I->i`, `ü/Ü->u`, `ö/Ö->o` + ayni normalize) ile toleransli. Toleransli eslesme WARNING logu ile kabul edilir; diger harf farklari (ş/ç/ğ dahil) bilincli olarak tolere edilmez.
 - Tek kayit draft DB/status akisi `SingleDraftService` ile repository'ye yazilir.
 - Gercek portal dialoglari `PortalErrorDetector` tarafindan okunur, OK ile kapatilir, screenshot alinir ve typed exception'a donusturulur.
 - Coklu isleme `BatchRunner` tarafindan sirali olarak yapilir; runner tek kayit akisini `SingleDraftService` uzerinden cagirir.

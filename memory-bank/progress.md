@@ -269,3 +269,16 @@ Notlar:
 
 - Job durumu bellekte tutulur; uygulama yeniden baslarsa son job raporu kaybolur, kayit statuleri DB'de kalir.
 - Tiklama sirasinda Playwright hatasi da temkinli olarak NEEDS_REVIEW sayilir (tiklama gitmis olabilir).
+
+## Ad/Soyad Harf Toleransi
+
+Tamamlandi:
+
+- Turmob/portal ad-soyad karsilastirmasinda `ı/i/İ/I`, `u/ü/U/Ü`, `o/ö/O/Ö` farklari esdeger sayilir.
+- Birebir eslesme mantigi (strip, coklu bosluk, casefold) degismedi; tolerans ikinci katman olarak eklendi.
+- Ayrik Unicode formlar (`I + U+0307`, `u + U+0308`) NFC ile birlestirilir.
+- Toleransla gecen eslesme WARNING logu ile iki degeri birlikte yazar; operasyon `app.log` icinde gorebilir.
+- `ş/s`, `ç/c`, `ğ/g` ve diger harf/uzunluk farklari hala `FAILED_NAME_MISMATCH`.
+- README, kullanim kilavuzu ve operasyon checklist guncellendi.
+- Tum test paketi 138 test ile basarili calisti (batch guvenilirlik PR #2 uzerine).
+

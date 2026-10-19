@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 import logging
 
+from invoice_automation.app.automation.playwright_worker import on_playwright_thread
 from invoice_automation.app.config import settings
 from invoice_automation.app.utils.exceptions import BrowserLaunchError
 
@@ -31,6 +32,7 @@ class BrowserManager:
             return None
         return self._page
 
+    @on_playwright_thread
     def start(self) -> Any:
         """Start a headful browser context and return the active page."""
 
@@ -67,6 +69,7 @@ class BrowserManager:
         )
         return self._page
 
+    @on_playwright_thread
     def close(self) -> None:
         """Close page, context, browser, and Playwright runtime."""
 

@@ -45,7 +45,7 @@ class Settings:
 
     app_name: str = os.getenv("APP_NAME", "e-Arsiv Fatura Otomasyonu")
     host: str = os.getenv("APP_HOST", "127.0.0.1")
-    port: int = int(os.getenv("APP_PORT", "8000"))
+    port: int = int(os.getenv("APP_PORT", "8010"))
     debug: bool = _bool_env("APP_DEBUG", False)
 
     database_path: Path = Path(

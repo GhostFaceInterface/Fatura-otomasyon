@@ -10,6 +10,7 @@ import logging
 from time import monotonic
 
 from invoice_automation.app.automation.browser_manager import BrowserManager
+from invoice_automation.app.automation.playwright_worker import on_playwright_thread
 from invoice_automation.app.automation.portal_selectors import PortalSelectors, portal_selectors
 from invoice_automation.app.config import settings
 from invoice_automation.app.utils.exceptions import (
@@ -85,6 +86,7 @@ class PortalSessionManager:
             return self._state
         return self._make_state(self._state.status, self._state.message, self._safe_current_url(page))
 
+    @on_playwright_thread
     def start_login(self) -> PortalSessionState:
         """Open the portal, fill credentials, and wait until the 2FA page."""
 
@@ -143,6 +145,7 @@ class PortalSessionManager:
         logger.info("2FA tamamlanmasi bekleniyor")
         return self._state
 
+    @on_playwright_thread
     def confirm_manual_2fa_completed(self) -> PortalSessionState:
         """Wait until the manually completed 2FA flow results in a ready session."""
 
@@ -163,6 +166,7 @@ class PortalSessionManager:
         logger.info("Session hazir | url=%s", self._safe_current_url(page))
         return self._state
 
+    @on_playwright_thread
     def close(self) -> PortalSessionState:
         """Close the active browser session."""
 

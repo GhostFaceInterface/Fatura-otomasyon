@@ -248,3 +248,24 @@ Tamamlandi:
 Operasyon notu:
 
 - Bu calisma alaninda mevcut `.env`, `.venv` ve Playwright Chromium cache'i bulunmuyor. Canli kullanima gecmeden once yerel `.env` dosyasi olusturulup portal bilgileri girilmeli; ilk calistirma internet erisimi gerektirir.
+
+## Toplu Taslak Guvenilirlik Sertlestirmesi (2026-10-17)
+
+Tamamlandi:
+
+- Tek Playwright worker thread: `BrowserManager.start/close`, `PortalSessionManager.start_login/confirm_manual_2fa_completed/close`, `SingleDraftService.create_for_record` ve `BatchRunner.run` `@on_playwright_thread` ile ayni kalici thread'de calisir. Batch job calisirken diger Playwright istekleri `PlaywrightWorkerBusyError` ile reddedilir (bloklanmaz).
+- Batch arka plan job'u: `BatchJobManager` (`services/batch_job_service.py`), tek aktif job lock'u, ilerleme (`GET /api/batch/job`), durdurma (`POST /batch/cancel`, `POST /api/batch/cancel`). `POST /api/batch/run` artik job baslatir (cakismada 409). UI submit'te onay ister ve butonu disable eder; sayfa job bitene kadar 2 sn'de bir ilerlemeyi yeniler.
+- Idempotens: atomik `claim_for_processing` (UPDATE ... WHERE islem_durumu IN (PENDING, SELECTED)); uygun olmayan kayit `RecordNotEligibleError`, batch'te loglanip atlanir.
+- `NEEDS_REVIEW` statusu: Taslak Kaydet tiklamasi/sonrasi dogrulanamayan sonuc (redirect yok, bilinmeyen dialog, tiklama hatasi). Acik portal reddi (InvalidTCKN, Turmob, e-Fatura, NameMismatch) FAILED/SKIPPED olarak kalir.
+- SUCCESS DB yazimi portal try blogundan ayrildi.
+- Acilista `recover_stale_in_progress` (lifespan) ve job crash'inde IN_PROGRESS -> NEEDS_REVIEW.
+- Kayit ekraninda "Kontrol ve yeniden deneme" karti: tekil/toplu FAILED -> PENDING, NEEDS_REVIEW icin "Taslak var" (-> SUCCESS) / "Taslak yok" (-> PENDING). API: `POST /api/records/{id}/retry`, `POST /api/records/{id}/review?draft_exists=`.
+- `idx_invoice_records_batch_id` SCHEMA_SQL'den migration sonrasina tasindi; eski DB boot hatasi giderildi.
+- `parse_currency` ve `validate_positive_usd_amount` NaN/Infinity reddeder; import batch+kayitlar tek transaction'da yazilir.
+- Varsayilan `APP_PORT` 8010; `run.py` 8000'i 8010'a yonlendirir.
+- Test paketi 110 test ile basarili.
+
+Notlar:
+
+- Job durumu bellekte tutulur; uygulama yeniden baslarsa son job raporu kaybolur, kayit statuleri DB'de kalir.
+- Tiklama sirasinda Playwright hatasi da temkinli olarak NEEDS_REVIEW sayilir (tiklama gitmis olabilir).

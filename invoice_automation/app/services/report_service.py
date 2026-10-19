@@ -21,6 +21,7 @@ class BatchReportService:
         duration_seconds: float,
         aborted_due_to_session_loss: bool,
         abort_reason: str | None = None,
+        cancelled: bool = False,
     ) -> BatchRunReport:
         """Return a completed batch report."""
 
@@ -56,4 +57,11 @@ class BatchReportService:
             duration_seconds=round(duration_seconds, 3),
             details=details,
             abort_reason=abort_reason,
+            needs_review_count=status_counts[InvoiceStatus.NEEDS_REVIEW.value],
+            needs_review_record_ids=[
+                detail.record_id
+                for detail in details
+                if detail.final_status == InvoiceStatus.NEEDS_REVIEW.value
+            ],
+            cancelled=cancelled,
         )

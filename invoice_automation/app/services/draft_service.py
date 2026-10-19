@@ -5,22 +5,26 @@ from __future__ import annotations
 import logging
 
 from invoice_automation.app.automation.draft_creator import DraftCreator
+from invoice_automation.app.automation.playwright_worker import on_playwright_thread
 from invoice_automation.app.automation.session_manager import (
     PortalSessionManager,
     PortalSessionStatus,
     portal_session_manager,
 )
 from invoice_automation.app.constants import InvoiceStatus
+from invoice_automation.app.db.models import InvoiceRecord
 from invoice_automation.app.db.repository import InvoiceRecordRepository
 from invoice_automation.app.schemas.draft import SingleDraftServiceResult
 from invoice_automation.app.utils.exceptions import (
     DraftAutomationError,
     DraftCreationError,
+    DraftSaveUnconfirmedError,
     EFaturaMukellefiError,
     ElementNotFoundError,
     InvalidTCKNError,
     NameMismatchError,
     PortalTimeoutError,
+    RecordNotEligibleError,
     SessionLostError,
     TurmobServiceError,
     UnknownPortalError,
@@ -43,65 +47,99 @@ class SingleDraftService:
         self.session_manager = session_manager
         self.draft_creator = draft_creator or DraftCreator()
 
+    @on_playwright_thread
     def create_for_record(self, record_id: int) -> SingleDraftServiceResult:
-        """Create a draft for one invoice record and persist the outcome."""
+        """Create a draft for one invoice record and persist the outcome.
+
+        Raises RecordNotEligibleError (a ValueError) without touching the portal
+        when the record is not PENDING/SELECTED, e.g. on a double submit.
+        """
 
         record = self.repository.get(record_id)
         if record is None:
             raise ValueError(f"Kayit bulunamadi: {record_id}")
 
+        claimed_record = self.repository.claim_for_processing(record_id)
+        if claimed_record is None:
+            current = self.repository.get(record_id)
+            current_status = current.islem_durumu if current else "UNKNOWN"
+            logger.warning(
+                "Kayit islenmeye uygun degil; portal islemi yapilmadi | record_id=%s status=%s",
+                record_id,
+                current_status,
+            )
+            raise RecordNotEligibleError(
+                f"Kayit {record_id} islenemez: durum {current_status}. "
+                "Sadece PENDING veya SELECTED kayitlar icin taslak olusturulur."
+            )
+        record = claimed_record
         logger.info("Tek kayit draft servisi basladi | record_id=%s", record_id)
-        self.repository.update_processing_state(record_id, InvoiceStatus.IN_PROGRESS)
 
         try:
             page = self._ready_page()
             draft_result = self.draft_creator.create_draft(page, record)
-            updated_record = self.repository.update_processing_state(
-                record_id,
-                draft_result.status,
-                portal_ref_no=draft_result.portal_ref_no,
-                hata_kodu=None,
-                hata_mesaji=None,
-                secili_mi=False,
-            )
-            logger.info("Tek kayit draft basarili | record_id=%s", record_id)
-            return SingleDraftServiceResult(
-                ok=True,
-                record=updated_record,
-                message=draft_result.message,
-            )
         except Exception as exc:
-            status = self._status_for_exception(exc)
-            error_code = exc.__class__.__name__
-            screenshot_path = getattr(exc, "screenshot_path", None)
-            stage = getattr(exc, "stage", None) or "draft_service_error"
-            if screenshot_path is None:
-                page = self.session_manager.browser_manager.page
-                if page is not None:
-                    screenshot_path = capture_error_screenshot(page, record_id, stage)
-            updated_record = self.repository.update_processing_state(
-                record_id,
-                status,
-                hata_kodu=error_code,
-                hata_mesaji=str(exc),
-                secili_mi=True,
+            return self._persist_failure(record, exc)
+
+        # Kept outside the portal try block: if this DB write fails the draft
+        # already exists, so the record must not be marked FAILED (and retried).
+        # It stays IN_PROGRESS and is moved to NEEDS_REVIEW by the batch job's
+        # crash recovery or on the next application startup.
+        updated_record = self.repository.update_processing_state(
+            record_id,
+            draft_result.status,
+            portal_ref_no=draft_result.portal_ref_no,
+            hata_kodu=None,
+            hata_mesaji=None,
+            secili_mi=False,
+        )
+        logger.info("Tek kayit draft basarili | record_id=%s", record_id)
+        return SingleDraftServiceResult(
+            ok=True,
+            record=updated_record,
+            message=draft_result.message,
+        )
+
+    def _persist_failure(self, record: InvoiceRecord, exc: Exception) -> SingleDraftServiceResult:
+        record_id = record.id
+        status = self._status_for_exception(exc)
+        error_code = exc.__class__.__name__
+        screenshot_path = getattr(exc, "screenshot_path", None)
+        stage = getattr(exc, "stage", None) or "draft_service_error"
+        if screenshot_path is None:
+            page = self.session_manager.browser_manager.page
+            if page is not None:
+                screenshot_path = capture_error_screenshot(page, record_id, stage)
+        message = str(exc)
+        if status == InvoiceStatus.NEEDS_REVIEW:
+            message = (
+                f"{message} Portalda taslak olusmus olabilir; Taslaklar listesini kontrol edip "
+                "kaydi manuel olarak sonuclandirin."
             )
-            logger.exception(
-                "Tek kayit draft basarisiz | record_id=%s tc=%s status=%s error_code=%s stage=%s screenshot=%s",
-                record_id,
-                record.tc_kimlik_no,
-                status.value,
-                error_code,
-                stage,
-                screenshot_path,
-            )
-            return SingleDraftServiceResult(
-                ok=False,
-                record=updated_record,
-                message=str(exc),
-                error_code=error_code,
-                screenshot_path=screenshot_path,
-            )
+        updated_record = self.repository.update_processing_state(
+            record_id,
+            status,
+            hata_kodu=error_code,
+            hata_mesaji=message,
+            # NEEDS_REVIEW must not stay selected; it is resolved manually only.
+            secili_mi=status != InvoiceStatus.NEEDS_REVIEW,
+        )
+        logger.exception(
+            "Tek kayit draft basarisiz | record_id=%s tc=%s status=%s error_code=%s stage=%s screenshot=%s",
+            record_id,
+            record.tc_kimlik_no,
+            status.value,
+            error_code,
+            stage,
+            screenshot_path,
+        )
+        return SingleDraftServiceResult(
+            ok=False,
+            record=updated_record,
+            message=message,
+            error_code=error_code,
+            screenshot_path=screenshot_path,
+        )
 
     def _ready_page(self):
         page = self.session_manager.browser_manager.page
@@ -112,6 +150,8 @@ class SingleDraftService:
         return page
 
     def _status_for_exception(self, exc: Exception) -> InvoiceStatus:
+        if isinstance(exc, DraftSaveUnconfirmedError):
+            return InvoiceStatus.NEEDS_REVIEW
         if isinstance(exc, InvalidTCKNError):
             return InvoiceStatus.FAILED_INVALID_TCKN
         if isinstance(exc, NameMismatchError):

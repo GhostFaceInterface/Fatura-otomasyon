@@ -14,14 +14,19 @@ from fastapi.templating import Jinja2Templates
 
 from invoice_automation.app.automation.session_manager import portal_session_manager
 from invoice_automation.app.config import ROOT_DIR, ensure_runtime_directories, settings
-from invoice_automation.app.constants import InvoiceStatus
+from invoice_automation.app.constants import RETRYABLE_STATUSES, InvoiceStatus
 from invoice_automation.app.db.repository import InvoiceRecordRepository
 from invoice_automation.app.schemas.batch import BatchPreview
+from invoice_automation.app.services.batch_job_service import batch_job_manager
 from invoice_automation.app.services.batch_service import BatchService
 from invoice_automation.app.services.draft_service import SingleDraftService
 from invoice_automation.app.services.import_service import ImportService, normalize_column_name
 from invoice_automation.app.services.selection_service import SelectionService
-from invoice_automation.app.utils.exceptions import ImportValidationError, PortalSessionError
+from invoice_automation.app.utils.exceptions import (
+    BatchJobAlreadyRunningError,
+    ImportValidationError,
+    PortalSessionError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -213,6 +218,17 @@ def records(
             "selected_count": selected_count,
             "eligible_count": eligible_count,
             "selection_saved": request.query_params.get("selection_saved") == "1",
+            "review_records": (
+                repository.list_by_statuses((InvoiceStatus.NEEDS_REVIEW,), batch_id=active_batch_id)
+                if active_batch_id is not None
+                else []
+            ),
+            "retryable_records": (
+                repository.list_by_statuses(RETRYABLE_STATUSES, batch_id=active_batch_id)
+                if active_batch_id is not None
+                else []
+            ),
+            "record_action_message": request.query_params.get("record_action"),
         },
     )
 
@@ -248,31 +264,52 @@ def save_selection(
     )
 
 
+@router.post("/records/{record_id}/retry")
+def retry_failed_record(record_id: int, batch_id: int = Form(...)) -> RedirectResponse:
+    """Consciously return one failed record to PENDING."""
+
+    reset_count = InvoiceRecordRepository().reset_failed_to_pending([record_id])
+    logger.info("Kayit yeniden denemeye alindi | record_id=%s reset=%s", record_id, reset_count)
+    return _redirect_to_records(batch_id, "retry_ok" if reset_count else "retry_rejected")
+
+
+@router.post("/records/retry-failed")
+def retry_all_failed_records(batch_id: int = Form(...)) -> RedirectResponse:
+    """Consciously return every retryable failed record of a batch to PENDING."""
+
+    repository = InvoiceRecordRepository()
+    record_ids = [record.id for record in repository.list_by_statuses(RETRYABLE_STATUSES, batch_id=batch_id)]
+    reset_count = repository.reset_failed_to_pending(record_ids)
+    logger.info("Hatali kayitlar yeniden denemeye alindi | batch_id=%s reset=%s", batch_id, reset_count)
+    return _redirect_to_records(batch_id, "retry_ok" if reset_count else "retry_rejected")
+
+
+@router.post("/records/{record_id}/review")
+def resolve_review_record(
+    record_id: int,
+    batch_id: int = Form(...),
+    draft_exists: str = Form(...),
+) -> RedirectResponse:
+    """Close a NEEDS_REVIEW record after the operator checked the portal by hand."""
+
+    exists = draft_exists == "1"
+    resolved = InvoiceRecordRepository().resolve_needs_review(record_id, draft_exists=exists)
+    logger.info(
+        "NEEDS_REVIEW kaydi manuel sonuclandirildi | record_id=%s draft_exists=%s resolved=%s",
+        record_id,
+        exists,
+        resolved is not None,
+    )
+    return _redirect_to_records(batch_id, "review_ok" if resolved else "review_rejected")
+
+
 @router.get("/batch", response_class=HTMLResponse)
 def batch(request: Request) -> HTMLResponse:
     """Render selected records prepared for batch processing."""
 
     repository = InvoiceRecordRepository()
     active_batch = _active_batch(repository, request.query_params.get("batch_id"))
-    active_batch_id = active_batch.id if active_batch else None
-    preview = (
-        BatchService(repository=repository).preview(batch_id=active_batch_id)
-        if active_batch_id is not None
-        else _empty_batch_preview()
-    )
-    return templates.TemplateResponse(
-        "batch.html",
-        {
-            "request": request,
-            "preview": preview,
-            "batches": repository.list_import_batches(),
-            "active_batch": active_batch,
-            "prepared": False,
-            "report": None,
-            "session_state": portal_session_manager.state,
-            "session_ready": portal_session_manager.state.status == "READY",
-        },
-    )
+    return _render_batch(request, repository, active_batch)
 
 
 @router.post("/batch/prepare", response_class=HTMLResponse)
@@ -281,44 +318,28 @@ def prepare_batch(request: Request, batch_id: int = Form(...)) -> HTMLResponse:
 
     repository = InvoiceRecordRepository()
     active_batch = repository.get_import_batch(batch_id)
-    preview = BatchService(repository=repository).prepare_selected_batch(batch_id=batch_id)
-    return templates.TemplateResponse(
-        "batch.html",
-        {
-            "request": request,
-            "preview": preview,
-            "batches": repository.list_import_batches(),
-            "active_batch": active_batch,
-            "prepared": True,
-            "report": None,
-            "session_state": portal_session_manager.state,
-            "session_ready": portal_session_manager.state.status == "READY",
-        },
-    )
+    return _render_batch(request, repository, active_batch, prepared=True)
 
 
-@router.post("/batch/run", response_class=HTMLResponse)
-def run_batch(request: Request, batch_id: int = Form(...)) -> HTMLResponse:
-    """Run selected eligible records through the Phase 6 batch flow."""
+@router.post("/batch/run", response_class=HTMLResponse, response_model=None)
+def run_batch(request: Request, batch_id: int = Form(...)) -> HTMLResponse | RedirectResponse:
+    """Start the batch as a background job and return immediately."""
 
     repository = InvoiceRecordRepository()
-    active_batch = repository.get_import_batch(batch_id)
-    batch_service = BatchService(repository=repository)
-    report = batch_service.run_selected_batch(batch_id=batch_id)
-    preview = batch_service.preview(batch_id=batch_id)
-    return templates.TemplateResponse(
-        "batch.html",
-        {
-            "request": request,
-            "preview": preview,
-            "batches": repository.list_import_batches(),
-            "active_batch": active_batch,
-            "prepared": False,
-            "report": report,
-            "session_state": portal_session_manager.state,
-            "session_ready": portal_session_manager.state.status == "READY",
-        },
-    )
+    try:
+        batch_job_manager.start(batch_id)
+    except (BatchJobAlreadyRunningError, PortalSessionError) as exc:
+        logger.warning("Batch job baslatilamadi | batch_id=%s error=%s", batch_id, exc)
+        return _render_batch(request, repository, repository.get_import_batch(batch_id), error=str(exc))
+    return RedirectResponse(url=f"/batch?{urlencode({'batch_id': batch_id})}", status_code=303)
+
+
+@router.post("/batch/cancel")
+def cancel_batch(batch_id: int = Form(...)) -> RedirectResponse:
+    """Request cancellation of the running batch job."""
+
+    batch_job_manager.cancel()
+    return RedirectResponse(url=f"/batch?{urlencode({'batch_id': batch_id})}", status_code=303)
 
 
 @router.get("/draft", response_class=HTMLResponse)
@@ -349,7 +370,7 @@ def create_single_draft(request: Request, record_id: int = Form(...)) -> HTMLRes
     error = None
     try:
         result = SingleDraftService(repository=repository).create_for_record(record_id)
-    except ValueError as exc:
+    except (ValueError, PortalSessionError) as exc:
         error = str(exc)
         logger.info("Draft POC rejected | record_id=%s error=%s", record_id, error)
 
@@ -429,13 +450,18 @@ def verify_session(request: Request) -> HTMLResponse:
 def close_session(request: Request) -> HTMLResponse:
     """Close the active browser session."""
 
-    state = portal_session_manager.close()
+    error = None
+    try:
+        state = portal_session_manager.close()
+    except PortalSessionError as exc:
+        state = portal_session_manager.state
+        error = str(exc)
     return templates.TemplateResponse(
         "session.html",
         {
             "request": request,
             "state": state,
-            "error": None,
+            "error": error,
         },
     )
 
@@ -498,6 +524,48 @@ def _active_batch(repository: InvoiceRecordRepository, raw_batch_id: str | None)
         except ValueError:
             return None
     return repository.latest_import_batch()
+
+
+def _render_batch(
+    request: Request,
+    repository: InvoiceRecordRepository,
+    active_batch,
+    *,
+    prepared: bool = False,
+    error: str | None = None,
+) -> HTMLResponse:
+    active_batch_id = active_batch.id if active_batch else None
+    preview = (
+        BatchService(repository=repository).preview(batch_id=active_batch_id)
+        if active_batch_id is not None
+        else _empty_batch_preview()
+    )
+    job = batch_job_manager.current_job()
+    job_running = job is not None and job.is_active
+    # Only show the job that belongs to the dönem on screen.
+    visible_job = job if job is not None and job.batch_id == active_batch_id else None
+    report = visible_job.report if visible_job is not None and not visible_job.is_active else None
+    return templates.TemplateResponse(
+        "batch.html",
+        {
+            "request": request,
+            "preview": preview,
+            "batches": repository.list_import_batches(),
+            "active_batch": active_batch,
+            "prepared": prepared,
+            "report": report,
+            "job": visible_job.to_dict() if visible_job is not None else None,
+            "job_running": job_running,
+            "error": error,
+            "session_state": portal_session_manager.state,
+            "session_ready": portal_session_manager.state.status == "READY",
+        },
+    )
+
+
+def _redirect_to_records(batch_id: int, record_action: str) -> RedirectResponse:
+    query = urlencode({"batch_id": batch_id, "record_action": record_action})
+    return RedirectResponse(url=f"/records?{query}", status_code=303)
 
 
 def _empty_batch_preview() -> BatchPreview:

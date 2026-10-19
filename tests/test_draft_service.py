@@ -1,4 +1,7 @@
 from pathlib import Path
+import sqlite3
+
+import pytest
 
 from invoice_automation.app.automation.draft_creator import DraftCreationResult
 from invoice_automation.app.automation.session_manager import PortalSessionState, PortalSessionStatus
@@ -6,7 +9,13 @@ from invoice_automation.app.constants import InvoiceStatus
 from invoice_automation.app.db.models import InvoiceRecordCreate
 from invoice_automation.app.db.repository import InvoiceRecordRepository
 from invoice_automation.app.services.draft_service import SingleDraftService
-from invoice_automation.app.utils.exceptions import InvalidTCKNError, NameMismatchError, TurmobServiceError
+from invoice_automation.app.utils.exceptions import (
+    DraftSaveUnconfirmedError,
+    InvalidTCKNError,
+    NameMismatchError,
+    RecordNotEligibleError,
+    TurmobServiceError,
+)
 
 
 class FakeBrowserManager:
@@ -144,3 +153,109 @@ def test_single_draft_service_requires_ready_session(tmp_path: Path) -> None:
     assert result.ok is False
     assert result.record.islem_durumu == InvoiceStatus.ABORTED_SESSION_LOST.value
     assert result.record.hata_kodu == "SessionLostError"
+
+
+class CountingSuccessDraftCreator(SuccessDraftCreator):
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def create_draft(self, page: object, record) -> DraftCreationResult:
+        self.calls += 1
+        return super().create_draft(page, record)
+
+
+class UnconfirmedSaveDraftCreator:
+    def create_draft(self, page: object, record) -> DraftCreationResult:
+        raise DraftSaveUnconfirmedError("redirect gelmedi", stage="draft_redirect_wait")
+
+
+def test_single_draft_service_is_idempotent_on_double_submit(tmp_path: Path) -> None:
+    repository, record_id = _repository_with_record(tmp_path)
+    creator = CountingSuccessDraftCreator()
+    service = SingleDraftService(
+        repository=repository,
+        session_manager=FakeSessionManager(PortalSessionStatus.READY),
+        draft_creator=creator,
+    )
+
+    service.create_for_record(record_id)
+    with pytest.raises(RecordNotEligibleError):
+        service.create_for_record(record_id)
+
+    assert creator.calls == 1
+    assert repository.get(record_id).islem_durumu == InvoiceStatus.SUCCESS_DRAFT_CREATED.value
+
+
+@pytest.mark.parametrize(
+    "status",
+    [
+        InvoiceStatus.IN_PROGRESS,
+        InvoiceStatus.SUCCESS_DRAFT_CREATED,
+        InvoiceStatus.FAILED_INVALID_TCKN,
+        InvoiceStatus.SKIPPED_EFATURA_MUKELLEFI,
+        InvoiceStatus.NEEDS_REVIEW,
+    ],
+)
+def test_single_draft_service_rejects_non_eligible_status_without_portal_call(
+    tmp_path: Path,
+    status: InvoiceStatus,
+) -> None:
+    repository, record_id = _repository_with_record(tmp_path)
+    repository.update_processing_state(record_id, status)
+    creator = CountingSuccessDraftCreator()
+    service = SingleDraftService(
+        repository=repository,
+        session_manager=FakeSessionManager(PortalSessionStatus.READY),
+        draft_creator=creator,
+    )
+
+    with pytest.raises(RecordNotEligibleError):
+        service.create_for_record(record_id)
+
+    assert creator.calls == 0
+    assert repository.get(record_id).islem_durumu == status.value
+
+
+def test_single_draft_service_marks_unconfirmed_save_as_needs_review(tmp_path: Path) -> None:
+    repository, record_id = _repository_with_record(tmp_path)
+    repository.update_selection([record_id])
+    service = SingleDraftService(
+        repository=repository,
+        session_manager=FakeSessionManager(PortalSessionStatus.READY),
+        draft_creator=UnconfirmedSaveDraftCreator(),
+    )
+
+    result = service.create_for_record(record_id)
+
+    assert result.ok is False
+    assert result.record.islem_durumu == InvoiceStatus.NEEDS_REVIEW.value
+    assert result.record.hata_kodu == "DraftSaveUnconfirmedError"
+    assert result.record.secili_mi is False
+    # NEEDS_REVIEW is neither batch-eligible nor resettable via the retry action.
+    assert repository.list_selected_for_batch() == []
+    assert repository.reset_failed_to_pending([record_id]) == 0
+
+
+def test_single_draft_service_success_db_failure_is_not_marked_failed(tmp_path: Path) -> None:
+    repository, record_id = _repository_with_record(tmp_path)
+    original_update = repository.update_processing_state
+
+    def failing_success_update(record_id, status, **kwargs):
+        if status == InvoiceStatus.SUCCESS_DRAFT_CREATED:
+            raise sqlite3.OperationalError("database is locked")
+        return original_update(record_id, status, **kwargs)
+
+    repository.update_processing_state = failing_success_update
+    service = SingleDraftService(
+        repository=repository,
+        session_manager=FakeSessionManager(PortalSessionStatus.READY),
+        draft_creator=SuccessDraftCreator(),
+    )
+
+    with pytest.raises(sqlite3.OperationalError):
+        service.create_for_record(record_id)
+
+    # The draft exists on the portal: the record must not become FAILED (retryable).
+    assert repository.get(record_id).islem_durumu == InvoiceStatus.IN_PROGRESS.value
+    assert repository.recover_stale_in_progress() == 1
+    assert repository.get(record_id).islem_durumu == InvoiceStatus.NEEDS_REVIEW.value

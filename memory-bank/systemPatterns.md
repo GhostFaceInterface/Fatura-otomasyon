@@ -18,6 +18,14 @@
 - Tek kayit draft DB/status akisi `SingleDraftService` ile repository'ye yazilir.
 - Gercek portal dialoglari `PortalErrorDetector` tarafindan okunur, OK ile kapatilir, screenshot alinir ve typed exception'a donusturulur.
 - Coklu isleme `BatchRunner` tarafindan sirali olarak yapilir; runner tek kayit akisini `SingleDraftService` uzerinden cagirir.
+- Sync Playwright thread'e baglidir: tum Playwright giris noktalari `@on_playwright_thread` ile `playwright_worker` tek kalici thread'ine yonlendirilir. Worker uzerinden yapilan ic ice cagrilar inline calisir; batch job aktifken diger thread'lerden gelen cagrilar `PlaywrightWorkerBusyError` ile hemen reddedilir.
+- Batch request icinde calismaz: `BatchJobManager` job'u worker'a arka plan isi olarak verir, ayni anda tek aktif job'a izin verir, ilerlemeyi bellekte tutar ve `cancel_event` ile kayitlar arasinda durdurur. Portalda islenen kayit her zaman tamamlanir.
+- Idempotens DB seviyesinde saglanir: `claim_for_processing` tek kosullu UPDATE ile sadece PENDING/SELECTED kaydi IN_PROGRESS'e alir. Cift tiklama veya es zamanli istek ikinci kez portala gitmez.
+- Taslak Kaydet tiklandiktan sonra sadece acik portal reddi temiz hata sayilir; diger her belirsizlik `DraftSaveUnconfirmedError` -> `NEEDS_REVIEW` olur. NEEDS_REVIEW otomatik yeniden denenmez ve `RETRYABLE_STATUSES` disindadir; sadece operator "Taslak var/yok" ile kapatir.
+- Basari DB yazimi portal try blogunun disindadir; boylece basarili taslak hicbir zaman FAILED isaretlenmez.
+- Uygulama acilisinda (FastAPI lifespan) IN_PROGRESS kalmis kayitlar NEEDS_REVIEW'e cekilir; job beklenmedik hatayla biterse ayni kurtarma hemen calisir.
+- Import once tum satirlari dogrular, sonra batch ve kayitlari `create_import` ile tek SQLite transaction'inda yazar.
+- Additive migration'a bagli index'ler (`idx_invoice_records_batch_id`) SCHEMA_SQL'de degil, migration sonrasinda olusturulur.
 - `BatchRunner.run()` sadece batch isleme sirasinda `SleepPreventionGuard` context manager'i acarak bilgisayarin uyumasini engeller ve cikista otomatik kapatir.
 - Sleep prevention macOS icin `caffeinate`, Windows icin `SetThreadExecutionState`, Linux icin `systemd-inhibit` kullanir.
 - Batch raporu `BatchReportService` ile status dagilimi ve kayit detaylarina donusturulur.

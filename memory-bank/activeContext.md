@@ -106,3 +106,17 @@ Sezon baslangici operasyon hazirligi:
 - Baslatma komutu ve guvenlik siniri README ile kullanim kilavuzunda belgelendi.
 - Port 8000 bu proje icin kullanilmaz. Baslatma betigi `.env` veya kabuk ortami ile gelen `APP_PORT=8000` degerini otomatik olarak `8010`e yonlendirir; kullanicidan ayar istenmez.
 - Portal kullanici adi/sifresi panel acilisinda gerekli degildir. Eksikse yalnizca kullanici oturum acma eylemini baslattiginda anlamli config hatasi uretilir.
+
+Toplu taslak guvenilirlik sertlestirmesi (2026-10-17, branch `fix/batch-reliability`):
+
+- Inceleme bulgulari: global singleton session + sync Playwright + `def` route'lar farkli threadpool thread'lerinde calisiyordu; batch request icinde ve lock'suz calisiyordu (cift tiklama = mukerrer taslak); draft servisinde status guard yoktu; Taslak Kaydet sonrasi redirect timeout'u FAILED yazilip tekrar denenebiliyordu; IN_PROGRESS'te takilan kayitlar kurtarilamiyordu; batch_id index'i migration'dan once olusturuldugu icin eski DB boot'ta patliyordu; NaN tutar import'u cokertiyordu.
+- Tum Playwright cagrilari tek kalici worker thread'de calisir (`playwright_worker`, `@on_playwright_thread`).
+- Batch artik `BatchJobManager` ile arka plan job'u; tek aktif job, `/api/batch/job` ilerleme, `/batch/cancel` + `/api/batch/cancel` durdurma (kayitlar arasinda).
+- `SingleDraftService` atomik `claim_for_processing` ile sadece PENDING/SELECTED kaydi IN_PROGRESS'e alir; aksi halde `RecordNotEligibleError` (portal'a dokunmadan).
+- Taslak Kaydet tiklandiktan sonra dogrulanamayan sonuc `DraftSaveUnconfirmedError` -> `NEEDS_REVIEW`. Bu kayitlar otomatik yeniden denenmez; kayit ekraninda "Taslak var/yok" ile manuel sonuclandirilir.
+- SUCCESS DB yazimi portal try blogunun disindadir; DB yazimi patlarsa kayit FAILED olmaz, IN_PROGRESS kalir ve acilista/job crash'inde NEEDS_REVIEW olur.
+- FAILED_* ve ABORTED_SESSION_LOST kayitlar bilincli aksiyonla PENDING'e alinabilir (`RETRYABLE_STATUSES`).
+- Import tek transaction'dadir; NaN/Infinity tutarlar satir hatasi olur.
+- Gercek portala karsi hicbir sey calistirilmadi; dogrulama birim testleri ve gecici DB ile 8011 portunda route smoke testiyle yapildi.
+
+Sonraki adim: canli pilotta batch job ilerleme ekranini, durdurma davranisini ve NEEDS_REVIEW akisini kucuk bir kayit grubuyla gozlemlemek.

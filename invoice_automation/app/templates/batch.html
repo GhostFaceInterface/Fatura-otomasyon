@@ -69,16 +69,24 @@
           </div>
         </div>
 
-        <form action="/batch/run" method="post" class="d-grid d-md-block">
+        {% if error %}
+        <div class="alert alert-danger" role="alert">{{ error }}</div>
+        {% endif %}
+
+        <form action="/batch/run" method="post" class="d-grid d-md-block" data-batch-run-form data-total="{{ preview.total_selected }}">
           {% if active_batch %}
           <input type="hidden" name="batch_id" value="{{ active_batch.id }}">
           {% endif %}
-          <button class="btn btn-primary btn-lg" type="submit" {% if preview.total_selected == 0 or not active_batch or not session_ready %}disabled{% endif %}>
+          <button class="btn btn-primary btn-lg" type="submit" {% if preview.total_selected == 0 or not active_batch or not session_ready or job_running %}disabled{% endif %}>
             Seçili kayıtlar için taslak oluştur
           </button>
         </form>
 
-        {% if not session_ready %}
+        {% if job_running %}
+        <div class="alert alert-info mt-3 mb-0" role="alert">
+          Bir toplu taslak işlemi çalışıyor. Yeni işlem başlatmak için bitmesini bekle veya durdur.
+        </div>
+        {% elif not session_ready %}
         <div class="alert alert-warning mt-3 mb-0" role="alert">
           Batch başlatmak için portal oturumu <code>READY</code> olmalı.
         </div>
@@ -119,6 +127,44 @@
   </div>
 </div>
 
+{% if job %}
+<div class="app-card mt-4" data-batch-job data-job-active="{{ '1' if job.is_active else '0' }}">
+  <div class="app-card-header">
+    <div>
+      <h2 class="h5 mb-1">İşlem durumu</h2>
+      <p class="text-muted mb-0" data-job-summary>
+        {{ job.processed }} / {{ job.total }} kayıt işlendi · Durum: <strong>{{ job.status }}</strong>
+        {% if job.current_record_name %} · Şu an: {{ job.current_record_name }}{% endif %}
+      </p>
+    </div>
+    {% if job.is_active and active_batch %}
+    <form action="/batch/cancel" method="post" data-batch-cancel-form>
+      <input type="hidden" name="batch_id" value="{{ active_batch.id }}">
+      <button type="submit" class="btn btn-outline-danger" {% if job.cancel_requested %}disabled{% endif %}>
+        {% if job.cancel_requested %}Durduruluyor…{% else %}İşlemi durdur{% endif %}
+      </button>
+    </form>
+    {% endif %}
+  </div>
+  <div class="app-card-body">
+    {% if job.cancel_requested and job.is_active %}
+    <div class="alert alert-warning" role="alert">
+      Durdurma istendi. Portalda işlenen kayıt tamamlandıktan sonra işlem duracak.
+    </div>
+    {% endif %}
+    {% if job.status == "CANCELLED" %}
+    <div class="alert alert-warning" role="alert">İşlem kullanıcı isteğiyle durduruldu. İşlenmeyen kayıtlar seçili kaldı.</div>
+    {% endif %}
+    {% if job.error %}
+    <div class="alert alert-danger" role="alert">{{ job.error }}</div>
+    {% endif %}
+    <div class="progress" role="progressbar" aria-label="İşlem ilerleme durumu" aria-valuenow="{{ job.progress_percent }}" aria-valuemin="0" aria-valuemax="100">
+      <div class="progress-bar {% if job.is_active %}progress-bar-striped progress-bar-animated{% endif %}" data-job-progress style="width: {{ job.progress_percent }}%"></div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
 {% if report %}
 <div class="app-card mt-4">
   <div class="app-card-header">
@@ -134,6 +180,13 @@
     {% if report.aborted_due_to_session_loss %}
     <div class="alert alert-danger" role="alert">
       İşlem kritik portal/oturum problemi nedeniyle durdu: {{ report.abort_reason }}
+    </div>
+    {% endif %}
+    {% if report.needs_review_count %}
+    <div class="alert alert-warning" role="alert">
+      <strong>{{ report.needs_review_count }}</strong> kayıtta "Taslak Kaydet" sonrası sonuç doğrulanamadı (NEEDS_REVIEW).
+      Bu kayıtlar otomatik yeniden denenmez; portaldaki Taslaklar listesini kontrol edip
+      <a href="/records{% if active_batch %}?batch_id={{ active_batch.id }}{% endif %}">kayıt ekranından</a> sonuçlandır.
     </div>
     {% endif %}
 
@@ -196,7 +249,7 @@
       </thead>
       <tbody>
         {% for detail in report.details %}
-        {% set detail_status_class = "status-success" if detail.final_status == "SUCCESS_DRAFT_CREATED" else "status-danger" if detail.final_status.startswith("FAILED_") else "status-warning" if detail.final_status.startswith("SKIPPED_") else "status-muted" %}
+        {% set detail_status_class = "status-success" if detail.final_status == "SUCCESS_DRAFT_CREATED" else "status-danger" if detail.final_status.startswith("FAILED_") else "status-warning" if detail.final_status.startswith("SKIPPED_") or detail.final_status == "NEEDS_REVIEW" else "status-muted" %}
         <tr data-report-row data-status="{{ detail.final_status }}" data-screenshot="{{ '1' if detail.screenshot_path else '0' }}">
           <td class="fw-semibold">{{ detail.full_name }}</td>
           <td>{{ detail.tc_kimlik_no }}</td>
@@ -254,6 +307,59 @@
 </div>
 
 <script>
+  const runForm = document.querySelector("[data-batch-run-form]");
+  if (runForm) {
+    runForm.addEventListener("submit", (event) => {
+      const button = runForm.querySelector("button[type=submit]");
+      if (button.disabled) {
+        event.preventDefault();
+        return;
+      }
+      const total = runForm.dataset.total || "0";
+      if (!window.confirm(`${total} kayıt için portalda taslak oluşturulacak. Devam edilsin mi?`)) {
+        event.preventDefault();
+        return;
+      }
+      button.disabled = true;
+      button.textContent = "Başlatılıyor…";
+    });
+  }
+
+  const cancelForm = document.querySelector("[data-batch-cancel-form]");
+  if (cancelForm) {
+    cancelForm.addEventListener("submit", (event) => {
+      if (!window.confirm("İşlem durdurulsun mu? Portalda işlenen kayıt tamamlandıktan sonra durur.")) {
+        event.preventDefault();
+        return;
+      }
+      cancelForm.querySelector("button[type=submit]").disabled = true;
+    });
+  }
+
+  const jobCard = document.querySelector("[data-batch-job]");
+  if (jobCard && jobCard.dataset.jobActive === "1") {
+    const progressBar = jobCard.querySelector("[data-job-progress]");
+    const summary = jobCard.querySelector("[data-job-summary]");
+    const poll = async () => {
+      try {
+        const response = await fetch("/api/batch/job", { headers: { Accept: "application/json" } });
+        const payload = await response.json();
+        const job = payload.job;
+        if (!job || !job.is_active) {
+          window.location.reload();
+          return;
+        }
+        progressBar.style.width = `${job.progress_percent}%`;
+        const current = job.current_record_name ? ` · Şu an: ${job.current_record_name}` : "";
+        summary.textContent = `${job.processed} / ${job.total} kayıt işlendi · Durum: ${job.status}${current}`;
+      } catch (error) {
+        // Geçici ağ hatası; bir sonraki turda tekrar denenir.
+      }
+      window.setTimeout(poll, 2000);
+    };
+    window.setTimeout(poll, 2000);
+  }
+
   document.querySelectorAll("[data-report-filter]").forEach((button) => {
     button.addEventListener("click", () => {
       const filter = button.dataset.reportFilter;

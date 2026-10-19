@@ -5,6 +5,7 @@ from invoice_automation.app.automation.session_manager import PortalSessionState
 from invoice_automation.app.constants import InvoiceStatus
 from invoice_automation.app.db.models import InvoiceRecord
 from invoice_automation.app.schemas.draft import SingleDraftServiceResult
+from invoice_automation.app.utils.exceptions import RecordNotEligibleError
 
 
 class FakePage:
@@ -229,3 +230,92 @@ def _record(record_id: int) -> InvoiceRecord:
         olusturma_zamani="2026-04-16T00:00:00Z",
         guncelleme_zamani="2026-04-16T00:00:00Z",
     )
+
+
+def test_batch_runner_cancel_stops_before_next_record_and_reports_progress() -> None:
+    _reset_fake_sleep_guard()
+    records = [_record(1), _record(2), _record(3)]
+    draft_service = FakeDraftService(
+        records,
+        [InvoiceStatus.SUCCESS_DRAFT_CREATED] * 3,
+    )
+    runner = BatchRunner(
+        draft_service=draft_service,
+        session_manager=FakeSessionManager(),
+        navigation=FakeNavigation(),
+        navigation_retry_count=2,
+        sleep_prevention_factory=FakeSleepGuard,
+    )
+    events: list[tuple[str, int]] = []
+
+    def progress(detail, next_record) -> None:
+        if next_record is not None:
+            events.append(("start", next_record.id))
+        if detail is not None:
+            events.append(("done", detail.record_id))
+
+    report = runner.run(
+        records,
+        progress_callback=progress,
+        should_cancel=lambda: len(draft_service.calls) >= 1,
+    )
+
+    assert draft_service.calls == [1]
+    assert events == [("start", 1), ("done", 1)]
+    assert report.cancelled is True
+    assert report.total_processed == 1
+    assert report.aborted_due_to_session_loss is False
+    assert FakeSleepGuard.exit_count == 1
+
+
+def test_batch_runner_skips_record_that_became_ineligible() -> None:
+    _reset_fake_sleep_guard()
+    records = [_record(1), _record(2)]
+    draft_service = FakeDraftService(records, [InvoiceStatus.SUCCESS_DRAFT_CREATED])
+    original = draft_service.create_for_record
+
+    def create_for_record(record_id: int):
+        if record_id == 1:
+            draft_service.calls.append(record_id)
+            raise RecordNotEligibleError("already processed")
+        return original(record_id)
+
+    draft_service.create_for_record = create_for_record
+    runner = BatchRunner(
+        draft_service=draft_service,
+        session_manager=FakeSessionManager(),
+        navigation=FakeNavigation(),
+        navigation_retry_count=2,
+        sleep_prevention_factory=FakeSleepGuard,
+    )
+
+    report = runner.run(records)
+
+    assert draft_service.calls == [1, 2]
+    assert report.total_processed == 1
+    assert report.processed_record_ids == [2]
+    assert report.success_count == 1
+
+
+def test_batch_runner_continues_after_needs_review_and_counts_it() -> None:
+    _reset_fake_sleep_guard()
+    records = [_record(1), _record(2)]
+    draft_service = FakeDraftService(
+        records,
+        [InvoiceStatus.NEEDS_REVIEW, InvoiceStatus.SUCCESS_DRAFT_CREATED],
+    )
+    runner = BatchRunner(
+        draft_service=draft_service,
+        session_manager=FakeSessionManager(),
+        navigation=FakeNavigation(),
+        navigation_retry_count=2,
+        sleep_prevention_factory=FakeSleepGuard,
+    )
+
+    report = runner.run(records)
+
+    assert draft_service.calls == [1, 2]
+    assert report.needs_review_count == 1
+    assert report.needs_review_record_ids == [1]
+    assert report.failed_count == 0
+    assert report.aborted_due_to_session_loss is False

@@ -46,6 +46,16 @@
 <div class="alert alert-warning">Henüz fatura dönemi yok. Önce veri yükleyip fatura dönemi oluştur.</div>
 {% endif %}
 
+{% if record_action_message == "retry_ok" %}
+<div class="alert alert-success">Kayıtlar yeniden denenmek üzere PENDING durumuna alındı. Tekrar işlemek için seçip kaydet.</div>
+{% elif record_action_message == "retry_rejected" %}
+<div class="alert alert-warning">Yeniden denemeye alınabilecek kayıt bulunamadı.</div>
+{% elif record_action_message == "review_ok" %}
+<div class="alert alert-success">Kontrol bekleyen kayıt sonuçlandırıldı.</div>
+{% elif record_action_message == "review_rejected" %}
+<div class="alert alert-warning">Kayıt artık kontrol bekleyen durumda değil.</div>
+{% endif %}
+
 {% if selection_saved %}
 <div class="alert alert-success">Seçim kaydedildi. Seçili kayıt sayısı: <strong>{{ selected_count }}</strong>.</div>
 {% endif %}
@@ -160,7 +170,7 @@
             <td>{{ record.tc_kimlik_no }}</td>
             <td>{{ "%.2f"|format(record.tutar_usd) }} USD</td>
             <td>
-              <span class="status-badge {% if record.islem_durumu == 'SUCCESS_DRAFT_CREATED' %}status-success{% elif record.islem_durumu.startswith('FAILED_') %}status-failed{% elif record.islem_durumu == 'SELECTED' %}status-selected{% else %}status-neutral{% endif %}">
+              <span class="status-badge {% if record.islem_durumu == 'SUCCESS_DRAFT_CREATED' %}status-success{% elif record.islem_durumu.startswith('FAILED_') %}status-failed{% elif record.islem_durumu == 'SELECTED' or record.islem_durumu == 'NEEDS_REVIEW' %}status-selected{% else %}status-neutral{% endif %}">
                 {{ record.islem_durumu }}
               </span>
             </td>
@@ -177,6 +187,90 @@
     </div>
   </div>
 </form>
+
+{% if active_batch and (review_records or retryable_records) %}
+<div class="app-card mt-4">
+  <div class="app-card-header">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
+      <div>
+        <h2 class="h5 mb-1">Kontrol ve yeniden deneme</h2>
+        <p class="small-muted mb-0">
+          NEEDS_REVIEW kayıtlarda "Taslak Kaydet" sonrası sonuç doğrulanamadı; portaldaki Taslaklar listesini kontrol etmeden yeniden deneme.
+          Hatalı kayıtlar ise bilinçli olarak PENDING durumuna alınabilir.
+        </p>
+      </div>
+      {% if retryable_records %}
+      <form action="/records/retry-failed" method="post" data-confirm="{{ retryable_records|length }} hatalı kayıt PENDING durumuna alınsın mı?">
+        <input type="hidden" name="batch_id" value="{{ active_batch.id }}">
+        <button type="submit" class="btn btn-outline-primary">Tüm hatalıları yeniden denemeye al ({{ retryable_records|length }})</button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead>
+        <tr>
+          <th>Kişi</th>
+          <th>TC kimlik no</th>
+          <th>Durum</th>
+          <th>Açıklama</th>
+          <th class="text-end">Aksiyon</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for record in review_records %}
+        <tr>
+          <td class="fw-semibold">{{ record.ad }} {{ record.soyad }}</td>
+          <td>{{ record.tc_kimlik_no }}</td>
+          <td><span class="status-badge status-warning">{{ record.islem_durumu }}</span></td>
+          <td class="small">{{ record.hata_mesaji or "-" }}</td>
+          <td class="text-end">
+            <div class="d-inline-flex gap-2">
+              <form action="/records/{{ record.id }}/review" method="post" data-confirm="Portalda {{ record.ad }} {{ record.soyad }} için taslak VAR mı? Kayıt başarılı olarak işaretlenecek.">
+                <input type="hidden" name="batch_id" value="{{ active_batch.id }}">
+                <input type="hidden" name="draft_exists" value="1">
+                <button type="submit" class="btn btn-sm btn-outline-success">Taslak var</button>
+              </form>
+              <form action="/records/{{ record.id }}/review" method="post" data-confirm="Portalda {{ record.ad }} {{ record.soyad }} için taslak YOK mu? Kayıt PENDING durumuna alınacak.">
+                <input type="hidden" name="batch_id" value="{{ active_batch.id }}">
+                <input type="hidden" name="draft_exists" value="0">
+                <button type="submit" class="btn btn-sm btn-outline-secondary">Taslak yok</button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+        {% for record in retryable_records %}
+        <tr>
+          <td class="fw-semibold">{{ record.ad }} {{ record.soyad }}</td>
+          <td>{{ record.tc_kimlik_no }}</td>
+          <td><span class="status-badge status-failed">{{ record.islem_durumu }}</span></td>
+          <td class="small">{{ record.hata_mesaji or "-" }}</td>
+          <td class="text-end">
+            <form action="/records/{{ record.id }}/retry" method="post" data-confirm="{{ record.ad }} {{ record.soyad }} PENDING durumuna alınsın mı?">
+              <input type="hidden" name="batch_id" value="{{ active_batch.id }}">
+              <button type="submit" class="btn btn-sm btn-outline-primary">Yeniden denemeye al</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+<script>
+  document.querySelectorAll("form[data-confirm]").forEach((form) => {
+    form.addEventListener("submit", (event) => {
+      if (!window.confirm(form.dataset.confirm)) {
+        event.preventDefault();
+        return;
+      }
+      form.querySelectorAll("button[type=submit]").forEach((button) => { button.disabled = true; });
+    });
+  });
+</script>
+{% endif %}
 
 <div id="selected-record-state" data-selected-record-ids="{{ selected_record_ids|join(',') }}" hidden></div>
 
@@ -215,7 +309,7 @@
       if (status.startsWith("FAILED_")) {
         return "status-failed";
       }
-      if (status === "SELECTED") {
+      if (status === "SELECTED" || status === "NEEDS_REVIEW") {
         return "status-selected";
       }
       return "status-neutral";

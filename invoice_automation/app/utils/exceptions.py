@@ -37,6 +37,18 @@ class SessionNotReadyError(PortalSessionError):
     """Raised when login completed state cannot be verified."""
 
 
+class PlaywrightWorkerBusyError(PortalSessionError):
+    """Raised when a portal action is requested while a batch job owns the browser."""
+
+
+class BatchJobAlreadyRunningError(InvoiceAutomationError):
+    """Raised when a second batch job is started while one is active."""
+
+
+class RecordNotEligibleError(ValueError):
+    """Raised when a record is not in a status that allows draft creation."""
+
+
 class DraftAutomationError(InvoiceAutomationError):
     """Base exception for draft invoice automation errors."""
 
@@ -78,6 +90,14 @@ class ElementNotFoundError(DraftAutomationError):
 
 class SessionLostError(DraftAutomationError):
     """Raised when the logged-in portal session is not usable."""
+
+
+class DraftSaveUnconfirmedError(DraftAutomationError):
+    """Raised when "Taslak Kaydet" was clicked but the outcome could not be verified.
+
+    The draft may or may not exist on the portal, so the record must be reviewed
+    manually and never retried automatically.
+    """
 
 
 class DraftCreationError(DraftAutomationError):

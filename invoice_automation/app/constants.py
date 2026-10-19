@@ -17,6 +17,7 @@ class InvoiceStatus(StrEnum):
     FAILED_PORTAL_TIMEOUT = "FAILED_PORTAL_TIMEOUT"
     FAILED_UNKNOWN = "FAILED_UNKNOWN"
     ABORTED_SESSION_LOST = "ABORTED_SESSION_LOST"
+    NEEDS_REVIEW = "NEEDS_REVIEW"
 
 
 DEFAULT_INVOICE_TARGET_TYPE = "earshiv"
@@ -54,7 +55,20 @@ BATCH_CONTINUE_STATUSES = (
     InvoiceStatus.SKIPPED_EFATURA_MUKELLEFI,
     InvoiceStatus.FAILED_PORTAL_TIMEOUT,
     InvoiceStatus.FAILED_UNKNOWN,
+    InvoiceStatus.NEEDS_REVIEW,
 )
 BATCH_ABORT_STATUSES = (
     InvoiceStatus.ABORTED_SESSION_LOST,
 )
+# Statuses that may be consciously reset to PENDING by the operator. Every one of
+# them is reached before "Taslak Kaydet" is confirmed as clicked, so a retry cannot
+# create a duplicate draft. NEEDS_REVIEW is deliberately excluded.
+RETRYABLE_STATUSES = (
+    InvoiceStatus.FAILED_INVALID_TCKN,
+    InvoiceStatus.FAILED_NAME_MISMATCH,
+    InvoiceStatus.FAILED_TURMOB_SERVICE_ERROR,
+    InvoiceStatus.FAILED_PORTAL_TIMEOUT,
+    InvoiceStatus.FAILED_UNKNOWN,
+    InvoiceStatus.ABORTED_SESSION_LOST,
+)
+STALE_IN_PROGRESS_ERROR_CODE = "StaleInProgressRecovered"

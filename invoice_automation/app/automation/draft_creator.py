@@ -13,10 +13,27 @@ from invoice_automation.app.automation.portal_selectors import PortalSelectors, 
 from invoice_automation.app.config import settings
 from invoice_automation.app.constants import EARCHIVE_DRAFTS_PATH, EARCHIVE_DRAFTS_SUCCESS_TEXTS, InvoiceStatus
 from invoice_automation.app.db.models import InvoiceRecord
-from invoice_automation.app.utils.exceptions import DraftCreationError, ElementNotFoundError, PortalTimeoutError
+from invoice_automation.app.utils.exceptions import (
+    DraftSaveUnconfirmedError,
+    EFaturaMukellefiError,
+    ElementNotFoundError,
+    InvalidTCKNError,
+    NameMismatchError,
+    PortalTimeoutError,
+    TurmobServiceError,
+)
 from invoice_automation.app.utils.screenshots import capture_error_screenshot
 
 logger = logging.getLogger(__name__)
+
+# Explicit portal error dialogs after "Taslak Kaydet" mean the portal refused the
+# save, so the record failed cleanly and may be retried later.
+POST_SAVE_PORTAL_REJECTIONS = (
+    InvalidTCKNError,
+    NameMismatchError,
+    TurmobServiceError,
+    EFaturaMukellefiError,
+)
 
 
 @dataclass(frozen=True)
@@ -71,9 +88,24 @@ class DraftCreator:
         self.error_detector.raise_if_portal_error(page, stage="form_fill", record_id=record.id)
 
         self._click_save_draft(page)
-        self._wait_after_save(page)
-        self.error_detector.raise_if_portal_error(page, stage="save_draft", record_id=record.id)
-        self._wait_for_success_redirect(page, record.id)
+        # From here on the portal may already hold the draft. Only an explicit,
+        # recognised portal rejection counts as a clean failure; anything else is
+        # reported as DraftSaveUnconfirmedError so the record goes to manual review
+        # and is never retried automatically (duplicate draft risk).
+        try:
+            self._wait_after_save(page)
+            self.error_detector.raise_if_portal_error(page, stage="save_draft", record_id=record.id)
+            self._wait_for_success_redirect(page, record.id)
+        except POST_SAVE_PORTAL_REJECTIONS:
+            raise
+        except DraftSaveUnconfirmedError:
+            raise
+        except Exception as exc:
+            raise DraftSaveUnconfirmedError(
+                f"Taslak Kaydet sonrasi sonuc dogrulanamadi: {exc}",
+                stage=getattr(exc, "stage", None) or "save_draft",
+                screenshot_path=getattr(exc, "screenshot_path", None),
+            ) from exc
 
         logger.info("Taslak kaydetme tamamlandi | record_id=%s", record.id)
         return DraftCreationResult(
@@ -86,11 +118,19 @@ class DraftCreator:
         try:
             button = page.get_by_role("button", name=self.selectors.save_draft_button_name)
             button.wait_for(state="visible", timeout=self.timeout_ms)
-            button.click(timeout=self.timeout_ms)
         except ElementNotFoundError:
             raise
         except Exception as exc:
-            raise PortalTimeoutError(f"Taslak kaydet butonuna basilamadi: {exc}") from exc
+            raise PortalTimeoutError(f"Taslak kaydet butonu bulunamadi: {exc}") from exc
+        try:
+            button.click(timeout=self.timeout_ms)
+        except Exception as exc:
+            # Playwright may raise after the click was dispatched (e.g. while
+            # waiting on the triggered navigation), so the save is ambiguous.
+            raise DraftSaveUnconfirmedError(
+                f"Taslak kaydet tiklamasi sirasinda hata: {exc}",
+                stage="save_draft_click",
+            ) from exc
 
     def _wait_after_save(self, page: Any) -> None:
         try:
@@ -116,7 +156,7 @@ class DraftCreator:
                 )
                 return
             screenshot_path = capture_error_screenshot(page, record_id, "draft_redirect_timeout")
-            raise PortalTimeoutError(
+            raise DraftSaveUnconfirmedError(
                 f"Taslak kayit sonrasi {EARCHIVE_DRAFTS_PATH} redirect'i gelmedi.",
                 stage="draft_redirect_wait",
                 screenshot_path=screenshot_path,

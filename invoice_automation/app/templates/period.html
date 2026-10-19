@@ -1,0 +1,203 @@
+{% extends "base.html" %}
+{% from "_records.html" import status_cell, row_actions, row_action_form %}
+{% block title %}{{ batch.name }} · e-Arşiv Taslak{% endblock %}
+
+{% block content %}
+{% set job_active = job and job.is_active %}
+<div class="page-head">
+  <div>
+    <h1>{{ batch.name }}</h1>
+    <p class="sub">{{ batch.source_file_name }}{% if batch.sheet_name %} · {{ batch.sheet_name }}{% endif %} · {{ records|length }} kişi · {{ "%.2f"|format(total_usd) }} USD</p>
+  </div>
+  <form action="/periods/{{ batch.id }}/delete" method="post"
+    data-confirm="&quot;{{ batch.name }}&quot; ve içindeki {{ records|length }} kişi silinsin mi?{% if counts.success or counts.review %} Bu dönemde {{ counts.success }} taslak oluşmuş; portaldaki taslaklar silinmez.{% endif %}">
+    <button type="submit" class="btn btn-danger" {% if job_active or counts.progress %}disabled title="İşlem sürüyor"{% endif %}>Dönemi sil</button>
+  </form>
+</div>
+
+{% if job_active %}
+<div class="note" id="job" data-active="1">
+  <div class="row">
+    <strong>Taslaklar oluşturuluyor</strong>
+    <span class="muted" id="job-text">{{ job.processed }} / {{ job.total }}{% if job.current_record_name %} · şu an: {{ job.current_record_name }}{% endif %}</span>
+    <span class="spacer"></span>
+    <form action="/periods/{{ batch.id }}/cancel" method="post" data-confirm="Durdurulsun mu? Portalda işlenen kişi bitince durur.">
+      <button type="submit" class="btn btn-sm" {% if job.cancel_requested %}disabled{% endif %}>{% if job.cancel_requested %}Durduruluyor…{% else %}Durdur{% endif %}</button>
+    </form>
+  </div>
+  <div class="progress"><div id="job-bar" style="width: {{ job.progress_percent }}%"></div></div>
+</div>
+{% elif report %}
+<div class="note">
+  <div class="row">
+    <span>
+      Son işlem: <strong>{{ report.total_processed }}</strong> kişi işlendi —
+      {{ report.success_count }} taslak, {{ report.failed_count }} hata, {{ report.skipped_count }} atlandı{% if report.needs_review_count %}, {{ report.needs_review_count }} kontrol gerekli{% endif %}.
+      {% if report.cancelled %}Kullanıcı durdurdu.{% endif %}
+    </span>
+  </div>
+  {% if report.aborted_due_to_session_loss %}
+  <p class="small" style="color: var(--danger-fg)">Portal oturumu düştüğü için durdu: {{ report.abort_reason }}</p>
+  {% endif %}
+  {% if job.error %}<p class="small" style="color: var(--danger-fg)">{{ job.error }}</p>{% endif %}
+  {% if report.details %}
+  <details>
+    <summary>Ayrıntılar</summary>
+    <div class="table-wrap" style="margin-top: 8px">
+      <table>
+        <thead><tr><th>Kişi</th><th>Sonuç</th><th>Mesaj</th><th>Ekran görüntüsü</th></tr></thead>
+        <tbody>
+          {% for detail in report.details %}
+          <tr>
+            <td>{{ detail.full_name }}</td>
+            <td><span class="badge tone-{{ detail.final_status|status_tone }}">{{ detail.final_status|status_label }}</span></td>
+            <td class="small">{{ detail.error_message or "" }}</td>
+            <td class="small muted">{{ detail.screenshot_path or "" }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </details>
+  {% endif %}
+</div>
+{% endif %}
+
+{% if other_job_running %}
+<div class="note">Başka bir dönemde taslak işlemi çalışıyor; bitene kadar burada taslak başlatılamaz.</div>
+{% endif %}
+
+<div class="row" style="margin-bottom: 12px">
+  <input type="search" id="search" placeholder="Ad, soyad veya TCKN ara" autocomplete="off" style="flex: 1; min-width: 200px; max-width: 360px">
+  <select id="group">
+    <option value="">Tümü ({{ records|length }})</option>
+    {% for key, label in STATUS_GROUPS %}
+    {% if counts[key] %}<option value="{{ key }}">{{ label }} ({{ counts[key] }})</option>{% endif %}
+    {% endfor %}
+  </select>
+</div>
+
+<form id="bulk" method="post">
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th class="check"><input type="checkbox" id="select-all" aria-label="Görünenlerin hepsini seç"></th>
+          <th>Ad Soyad</th>
+          <th>TCKN</th>
+          <th class="num">Tutar</th>
+          <th>Durum</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for record in records %}
+        {% set group = record.islem_durumu|status_group %}
+        <tr data-group="{{ group }}" data-search="{{ record.ad }} {{ record.soyad }} {{ record.tc_kimlik_no }}">
+          <td class="check">
+            <input type="checkbox" name="record_ids" value="{{ record.id }}" class="row-check"
+              data-eligible="{{ '1' if group == 'waiting' else '0' }}" {% if group == 'progress' %}disabled{% endif %}>
+          </td>
+          <td>{{ record.ad }} {{ record.soyad }}</td>
+          <td>{{ record.tc_kimlik_no }}</td>
+          <td class="num">{{ "%.2f"|format(record.tutar_usd) }}</td>
+          <td>{{ status_cell(record) }}</td>
+          <td class="actions">{{ row_actions(record) }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" class="empty">Bu dönemde kişi yok.</td></tr>
+        {% endfor %}
+        <tr id="no-match" hidden><td colspan="6" class="empty">Eşleşen kişi yok.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="actionbar">
+    <span id="selected-text" class="muted">Seçili yok</span>
+    <span class="spacer"></span>
+    <button type="submit" id="delete-selected" class="btn btn-danger" formaction="/periods/{{ batch.id }}/records/delete" disabled>Seçilileri sil</button>
+    {% if not session_ready %}<a href="/portal" class="small">Taslak için önce portala giriş yap</a>{% endif %}
+    <button type="submit" id="draft-selected" class="btn btn-primary" formaction="/periods/{{ batch.id }}/draft"
+      data-blocked="{{ '1' if not session_ready or job_active or other_job_running else '0' }}" disabled>Taslak oluştur</button>
+  </div>
+</form>
+{{ row_action_form("/periods/" ~ batch.id) }}
+{% endblock %}
+
+{% block scripts %}
+<script>
+  (() => {
+    const rows = [...document.querySelectorAll("tr[data-group]")];
+    const search = document.getElementById("search");
+    const group = document.getElementById("group");
+    const selectAll = document.getElementById("select-all");
+    const noMatch = document.getElementById("no-match");
+    const selectedText = document.getElementById("selected-text");
+    const deleteButton = document.getElementById("delete-selected");
+    const draftButton = document.getElementById("draft-selected");
+    const draftBlocked = draftButton.dataset.blocked === "1";
+
+    // Lowercase with Turkish rules on both sides so İ/ı match as typed.
+    const haystack = new Map(rows.map((row) => [row, row.dataset.search.toLocaleLowerCase("tr")]));
+    const checkOf = (row) => row.querySelector(".row-check");
+    const visibleChecks = () => rows.filter((row) => !row.hidden).map(checkOf).filter((box) => !box.disabled);
+
+    const refresh = () => {
+      const checked = rows.map(checkOf).filter((box) => box.checked);
+      const eligible = checked.filter((box) => box.dataset.eligible === "1").length;
+      selectedText.textContent = checked.length ? `${checked.length} kişi seçili` : "Seçili yok";
+      deleteButton.disabled = checked.length === 0;
+      deleteButton.dataset.confirm = `${checked.length} kişi silinsin mi?`;
+      draftButton.disabled = draftBlocked || eligible === 0;
+      draftButton.textContent = eligible ? `${eligible} kişi için taslak oluştur` : "Taslak oluştur";
+      draftButton.dataset.confirm = `${eligible} kişi için portalda taslak oluşturulacak. Başlatılsın mı?`;
+      const visible = visibleChecks();
+      selectAll.checked = visible.length > 0 && visible.every((box) => box.checked);
+    };
+
+    const applyFilter = () => {
+      const term = search.value.trim().toLocaleLowerCase("tr");
+      const wanted = group.value;
+      let shown = 0;
+      rows.forEach((row) => {
+        const match = (!wanted || row.dataset.group === wanted) && (!term || haystack.get(row).includes(term));
+        row.hidden = !match;
+        if (match) shown += 1;
+      });
+      noMatch.hidden = shown > 0 || rows.length === 0;
+      refresh();
+    };
+
+    search.addEventListener("input", applyFilter);
+    group.addEventListener("change", applyFilter);
+    selectAll.addEventListener("change", () => {
+      visibleChecks().forEach((box) => { box.checked = selectAll.checked; });
+      refresh();
+    });
+    rows.forEach((row) => checkOf(row).addEventListener("change", refresh));
+    refresh();
+
+    const job = document.getElementById("job");
+    if (job) {
+      const bar = document.getElementById("job-bar");
+      const text = document.getElementById("job-text");
+      const poll = async () => {
+        try {
+          const response = await fetch("/api/batch/job", { headers: { Accept: "application/json" } });
+          const current = (await response.json()).job;
+          if (!current || !current.is_active) {
+            window.location.reload();
+            return;
+          }
+          bar.style.width = `${current.progress_percent}%`;
+          text.textContent = `${current.processed} / ${current.total}` + (current.current_record_name ? ` · şu an: ${current.current_record_name}` : "");
+        } catch (error) {
+          // Geçici hata; sonraki turda tekrar denenir.
+        }
+        window.setTimeout(poll, 2000);
+      };
+      window.setTimeout(poll, 2000);
+    }
+  })();
+</script>
+{% endblock %}

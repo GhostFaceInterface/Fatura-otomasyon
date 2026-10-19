@@ -1,542 +1,65 @@
 {% extends "base.html" %}
+{% from "_records.html" import status_cell, row_actions, row_action_form %}
+{% block title %}Tüm kayıtlar · e-Arşiv Taslak{% endblock %}
 
 {% block content %}
-<div class="page-header">
-  <div>
-    <div class="page-kicker">Kayıt kontrolü</div>
-    <h1 class="page-title">Kayıtları kontrol et ve seç</h1>
-    <p class="page-description">Aktif fatura dönemindeki kişileri kontrol et, taslak oluşturulacak kayıtları işaretle ve seçimi kaydet.</p>
-  </div>
-  <div class="action-bar">
-    <a class="btn btn-outline-secondary" href="/">Yeni dosya yükle</a>
-    {% if active_batch %}
-    <a class="btn btn-outline-primary" href="/session">Oturum aç</a>
-    <a class="btn btn-primary" href="/batch?batch_id={{ active_batch.id }}">Taslak oluştur</a>
-    {% endif %}
-  </div>
+<div class="page-head">
+  <h1>Tüm kayıtlar</h1>
 </div>
 
-{% if active_batch %}
-<div class="context-card mb-4">
-  <div class="row g-3 align-items-center">
-    <div class="col-lg-7">
-      <span>Aktif fatura dönemi</span>
-      <strong>{{ active_batch.name }}</strong>
-      <span>{{ active_batch.source_file_name }} / {{ active_batch.sheet_name or "-" }}</span>
-    </div>
-    <div class="col-lg-5">
-      <div class="row g-2">
-        <div class="col-4">
-          <div class="metric-label">Görünen</div>
-          <div id="visible-record-count" class="fw-bold">{{ records|length }}</div>
-        </div>
-        <div class="col-4">
-          <div class="metric-label">Uygun</div>
-          <div id="eligible-record-count" class="fw-bold">{{ eligible_count }}</div>
-        </div>
-        <div class="col-4">
-          <div class="metric-label">Seçili</div>
-          <div id="selected-record-count" class="fw-bold">{{ selected_count }}</div>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-{% else %}
-<div class="alert alert-warning">Henüz fatura dönemi yok. Önce veri yükleyip fatura dönemi oluştur.</div>
-{% endif %}
-
-{% if record_action_message == "retry_ok" %}
-<div class="alert alert-success">Kayıtlar yeniden denenmek üzere PENDING durumuna alındı. Tekrar işlemek için seçip kaydet.</div>
-{% elif record_action_message == "retry_rejected" %}
-<div class="alert alert-warning">Yeniden denemeye alınabilecek kayıt bulunamadı.</div>
-{% elif record_action_message == "review_ok" %}
-<div class="alert alert-success">Kontrol bekleyen kayıt sonuçlandırıldı.</div>
-{% elif record_action_message == "review_rejected" %}
-<div class="alert alert-warning">Kayıt artık kontrol bekleyen durumda değil.</div>
-{% elif record_action_message == "delete_ok" %}
-<div class="alert alert-success"><strong>{{ deleted_count }}</strong> kayıt veritabanından silindi.</div>
-{% elif record_action_message == "delete_none" %}
-<div class="alert alert-warning">Silinecek kayıt bulunamadı. İşlenmekte olan (IN_PROGRESS) kayıtlar silinmez.</div>
-{% elif record_action_message == "delete_blocked" %}
-<div class="alert alert-danger">{{ record_action_error or "Kayıtlar şu anda silinemez." }}</div>
-{% endif %}
-
-{% if selection_saved %}
-<div class="alert alert-success">Seçim kaydedildi. Seçili kayıt sayısı: <strong>{{ selected_count }}</strong>.</div>
-{% endif %}
-
-<div class="app-card mb-4">
-  <div class="app-card-header">
-    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
-      <div>
-        <h2 class="h5 mb-1">Filtreler</h2>
-        <p class="small-muted mb-0">Dönem, durum, kişi bilgisi veya sıralama değiştiğinde liste otomatik yenilenir.</p>
-      </div>
-    </div>
-  </div>
-  <div class="app-card-body">
-    <form action="/records" method="get" class="row g-3 align-items-end" data-auto-filter-form>
-      <div class="col-lg-3">
-        <label for="batch_id" class="form-label">Fatura dönemi</label>
-        <select id="batch_id" name="batch_id" class="form-select" required>
-          {% for batch in batches %}
-          <option value="{{ batch.id }}" {% if active_batch and batch.id == active_batch.id %}selected{% endif %}>{{ batch.name }}</option>
-          {% endfor %}
-        </select>
-      </div>
-      <div class="col-lg-2">
-        <label for="status" class="form-label">Durum</label>
-        <select id="status" name="status" class="form-select">
-          <option value="">Tüm kayıtlar</option>
-          {% for status in statuses %}
-          <option value="{{ status }}" {% if selected_status == status %}selected{% endif %}>{{ status }}</option>
-          {% endfor %}
-        </select>
-      </div>
-      <div class="col-lg-3">
-        <label for="q" class="form-label">Arama</label>
-        <input id="q" type="search" name="q" class="form-control" value="{{ search_query }}" placeholder="Ad, soyad veya TCKN" autocomplete="off">
-      </div>
-      <div class="col-lg-2">
-        <label for="sort_by" class="form-label">Sıralama</label>
-        <select id="sort_by" name="sort_by" class="form-select">
-          {% for sort_key, sort_label in sort_options %}
-          <option value="{{ sort_key }}" {% if selected_sort_by == sort_key %}selected{% endif %}>{{ sort_label }}</option>
-          {% endfor %}
-        </select>
-      </div>
-      <div class="col-lg-2">
-        <label for="sort_dir" class="form-label">Yön</label>
-        <select id="sort_dir" name="sort_dir" class="form-select">
-          <option value="asc" {% if selected_sort_dir == "asc" %}selected{% endif %}>Artan</option>
-          <option value="desc" {% if selected_sort_dir == "desc" %}selected{% endif %}>Azalan</option>
-        </select>
-      </div>
-    </form>
-  </div>
-</div>
-
-<form action="/records/selection" method="post">
-  {% if active_batch %}
-  <input type="hidden" name="batch_id" value="{{ active_batch.id }}">
-  {% endif %}
-  <input type="hidden" name="status" value="{{ selected_status or '' }}">
-  <input type="hidden" name="q" value="{{ search_query }}">
-  <input type="hidden" name="sort_by" value="{{ selected_sort_by }}">
-  <input type="hidden" name="sort_dir" value="{{ selected_sort_dir }}">
-  <div id="preserved-selected-records">
-    {% for selected_id in selected_record_ids %}
-    {% if selected_id not in visible_record_ids %}
-    <input type="hidden" name="selected_record_ids" value="{{ selected_id }}">
-    {% endif %}
+<form method="get" action="/records" class="row" style="margin-bottom: 12px">
+  <input type="search" name="q" value="{{ q }}" placeholder="Ad, soyad veya TCKN ara" autocomplete="off" style="flex: 1; min-width: 200px; max-width: 360px">
+  <select name="period">
+    <option value="">Tüm dönemler</option>
+    {% for batch in batches %}
+    <option value="{{ batch.id }}" {% if period_id == batch.id %}selected{% endif %}>{{ batch.name }}</option>
     {% endfor %}
-  </div>
+  </select>
+  <select name="group">
+    <option value="">Tüm durumlar</option>
+    {% for key, label in STATUS_GROUPS %}
+    <option value="{{ key }}" {% if group == key %}selected{% endif %}>{{ label }}</option>
+    {% endfor %}
+  </select>
+  <button type="submit" class="btn">Ara</button>
+  {% if q or group or period_id %}<a href="/records" class="small">Temizle</a>{% endif %}
+</form>
 
-  <div class="app-card">
-    <div class="app-card-header">
-      <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
-        <div>
-          <h2 class="h5 mb-1">Kayıt listesi</h2>
-          <p class="small-muted mb-0">Yalnızca PENDING ve SELECTED kayıtlar seçilebilir.</p>
-        </div>
-        <div class="d-flex flex-wrap gap-2">
-          <button id="delete-selected-records" type="submit" class="btn btn-outline-danger" formaction="/records/delete" data-confirm="Seçili kayıtlar silinsin mi?" {% if not active_batch or not selected_count %}disabled{% endif %}>Seçilileri sil</button>
-          <button type="submit" class="btn btn-primary" {% if not active_batch %}disabled{% endif %}>Seçimi kaydet</button>
-        </div>
-      </div>
-    </div>
+<p class="muted small">{{ records|length }} kayıt</p>
 
-    <div class="table-responsive">
-      <table class="table table-hover align-middle">
-        <thead>
-          <tr>
-            <th style="width: 150px;">
-              <label class="d-inline-flex align-items-center gap-2 mb-0">
-                <input id="select-all-records" type="checkbox">
-                Tümünü seç
-              </label>
-            </th>
-            <th>Ad</th>
-            <th>Soyad</th>
-            <th>TC kimlik no</th>
-            <th>Tutar</th>
-            <th>Durum</th>
-            <th class="text-end">İşlem</th>
-          </tr>
-        </thead>
-        <tbody id="records-table-body">
-          {% for record in records %}
-          <tr>
-            <td>
-              {% if record.islem_durumu in ["PENDING", "SELECTED"] %}
-              <input class="record-select-checkbox" type="checkbox" name="selected_record_ids" value="{{ record.id }}" {% if record.secili_mi %}checked{% endif %}>
-              {% else %}
-              <input type="checkbox" {% if record.secili_mi %}checked{% endif %} disabled>
-              {% endif %}
-            </td>
-            <td>{{ record.ad }}</td>
-            <td>{{ record.soyad }}</td>
-            <td>{{ record.tc_kimlik_no }}</td>
-            <td>{{ "%.2f"|format(record.tutar_usd) }} USD</td>
-            <td>
-              <span class="status-badge {% if record.islem_durumu == 'SUCCESS_DRAFT_CREATED' %}status-success{% elif record.islem_durumu.startswith('FAILED_') %}status-failed{% elif record.islem_durumu == 'SELECTED' or record.islem_durumu == 'NEEDS_REVIEW' %}status-selected{% else %}status-neutral{% endif %}">
-                {{ record.islem_durumu }}
-              </span>
-            </td>
-            <td class="text-end">
-              {% if record.islem_durumu != "IN_PROGRESS" %}
-              <button type="submit" form="record-delete-form" formaction="/records/{{ record.id }}/delete" class="btn btn-sm btn-outline-danger" data-confirm="{{ record.ad }} {{ record.soyad }} kaydı silinsin mi?{% if record.islem_durumu in ['SUCCESS_DRAFT_CREATED', 'NEEDS_REVIEW'] %} Portalda oluşmuş taslak silinmez; sadece yerel kayıt silinir.{% endif %}">Sil</button>
-              {% else %}
-              <span class="small-muted">İşleniyor</span>
-              {% endif %}
-            </td>
-          </tr>
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th>Ad Soyad</th>
+        <th>TCKN</th>
+        <th class="num">Tutar</th>
+        <th>Dönem</th>
+        <th>Durum</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for record in records %}
+      <tr>
+        <td>{{ record.ad }} {{ record.soyad }}</td>
+        <td>{{ record.tc_kimlik_no }}</td>
+        <td class="num">{{ "%.2f"|format(record.tutar_usd) }}</td>
+        <td>
+          {% if record.batch_id in batch_names %}
+          <a href="/periods/{{ record.batch_id }}">{{ batch_names[record.batch_id] }}</a>
           {% else %}
-          <tr>
-            <td colspan="7">
-              <div class="empty-state">Bu filtrelerle kayıt bulunamadı.</div>
-            </td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-  </div>
-</form>
-
-{% if active_batch %}
-<form id="record-delete-form" method="post" hidden>
-  <input type="hidden" name="batch_id" value="{{ active_batch.id }}">
-</form>
-{% endif %}
-
-{% if active_batch and (review_records or retryable_records) %}
-<div class="app-card mt-4">
-  <div class="app-card-header">
-    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
-      <div>
-        <h2 class="h5 mb-1">Kontrol ve yeniden deneme</h2>
-        <p class="small-muted mb-0">
-          NEEDS_REVIEW kayıtlarda "Taslak Kaydet" sonrası sonuç doğrulanamadı; portaldaki Taslaklar listesini kontrol etmeden yeniden deneme.
-          Hatalı kayıtlar ise bilinçli olarak PENDING durumuna alınabilir.
-        </p>
-      </div>
-      {% if retryable_records %}
-      <form action="/records/retry-failed" method="post" data-confirm="{{ retryable_records|length }} hatalı kayıt PENDING durumuna alınsın mı?">
-        <input type="hidden" name="batch_id" value="{{ active_batch.id }}">
-        <button type="submit" class="btn btn-outline-primary">Tüm hatalıları yeniden denemeye al ({{ retryable_records|length }})</button>
-      </form>
-      {% endif %}
-    </div>
-  </div>
-  <div class="table-responsive">
-    <table class="table table-hover align-middle mb-0">
-      <thead>
-        <tr>
-          <th>Kişi</th>
-          <th>TC kimlik no</th>
-          <th>Durum</th>
-          <th>Açıklama</th>
-          <th class="text-end">Aksiyon</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for record in review_records %}
-        <tr>
-          <td class="fw-semibold">{{ record.ad }} {{ record.soyad }}</td>
-          <td>{{ record.tc_kimlik_no }}</td>
-          <td><span class="status-badge status-warning">{{ record.islem_durumu }}</span></td>
-          <td class="small">{{ record.hata_mesaji or "-" }}</td>
-          <td class="text-end">
-            <div class="d-inline-flex gap-2">
-              <form action="/records/{{ record.id }}/review" method="post" data-confirm="Portalda {{ record.ad }} {{ record.soyad }} için taslak VAR mı? Kayıt başarılı olarak işaretlenecek.">
-                <input type="hidden" name="batch_id" value="{{ active_batch.id }}">
-                <input type="hidden" name="draft_exists" value="1">
-                <button type="submit" class="btn btn-sm btn-outline-success">Taslak var</button>
-              </form>
-              <form action="/records/{{ record.id }}/review" method="post" data-confirm="Portalda {{ record.ad }} {{ record.soyad }} için taslak YOK mu? Kayıt PENDING durumuna alınacak.">
-                <input type="hidden" name="batch_id" value="{{ active_batch.id }}">
-                <input type="hidden" name="draft_exists" value="0">
-                <button type="submit" class="btn btn-sm btn-outline-secondary">Taslak yok</button>
-              </form>
-            </div>
-          </td>
-        </tr>
-        {% endfor %}
-        {% for record in retryable_records %}
-        <tr>
-          <td class="fw-semibold">{{ record.ad }} {{ record.soyad }}</td>
-          <td>{{ record.tc_kimlik_no }}</td>
-          <td><span class="status-badge status-failed">{{ record.islem_durumu }}</span></td>
-          <td class="small">{{ record.hata_mesaji or "-" }}</td>
-          <td class="text-end">
-            <form action="/records/{{ record.id }}/retry" method="post" data-confirm="{{ record.ad }} {{ record.soyad }} PENDING durumuna alınsın mı?">
-              <input type="hidden" name="batch_id" value="{{ active_batch.id }}">
-              <button type="submit" class="btn btn-sm btn-outline-primary">Yeniden denemeye al</button>
-            </form>
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
+          <span class="muted">Dönemsiz</span>
+          {% endif %}
+        </td>
+        <td>{{ status_cell(record) }}</td>
+        <td class="actions">{{ row_actions(record) }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" class="empty">Kayıt bulunamadı.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
 </div>
-{% endif %}
-
-<div id="selected-record-state" data-selected-record-ids="{{ selected_record_ids|join(',') }}" hidden></div>
-
-<script>
-  (() => {
-    const selectableStatuses = new Set(["PENDING", "SELECTED"]);
-    const selectedState = document.getElementById("selected-record-state");
-    const selectedRecordIds = new Set(
-      (selectedState?.dataset.selectedRecordIds || "")
-        .split(",")
-        .map((value) => value.trim())
-        .filter(Boolean)
-    );
-    const filterForm = document.querySelector("[data-auto-filter-form]");
-    const selectionForm = document.querySelector('form[action="/records/selection"]');
-    const tableBody = document.getElementById("records-table-body");
-    const preservedSelectedRecords = document.getElementById("preserved-selected-records");
-    const visibleRecordCount = document.getElementById("visible-record-count");
-    const eligibleRecordCount = document.getElementById("eligible-record-count");
-    const selectedRecordCount = document.getElementById("selected-record-count");
-    const selectAll = document.getElementById("select-all-records");
-    let recordsController;
-
-    const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, (character) => ({
-      "&": "&amp;",
-      "<": "&lt;",
-      ">": "&gt;",
-      '"': "&quot;",
-      "'": "&#039;",
-    }[character]));
-
-    const statusClass = (status) => {
-      if (status === "SUCCESS_DRAFT_CREATED") {
-        return "status-success";
-      }
-      if (status.startsWith("FAILED_")) {
-        return "status-failed";
-      }
-      if (status === "SELECTED" || status === "NEEDS_REVIEW") {
-        return "status-selected";
-      }
-      return "status-neutral";
-    };
-
-    const draftMayExistStatuses = new Set(["SUCCESS_DRAFT_CREATED", "NEEDS_REVIEW"]);
-    const deleteButton = (record) => {
-      if (record.islem_durumu === "IN_PROGRESS") {
-        return `<span class="small-muted">İşleniyor</span>`;
-      }
-      let message = `${record.ad} ${record.soyad} kaydı silinsin mi?`;
-      if (draftMayExistStatuses.has(record.islem_durumu)) {
-        message += " Portalda oluşmuş taslak silinmez; sadece yerel kayıt silinir.";
-      }
-      return `<button type="submit" form="record-delete-form" formaction="/records/${encodeURIComponent(record.id)}/delete" class="btn btn-sm btn-outline-danger" data-confirm="${escapeHtml(message)}">Sil</button>`;
-    };
-
-    const renderRecordRow = (record) => {
-      const recordId = String(record.id);
-      const isSelectable = selectableStatuses.has(record.islem_durumu);
-      const isChecked = selectedRecordIds.has(recordId);
-      const checkbox = isSelectable
-        ? `<input class="record-select-checkbox" type="checkbox" name="selected_record_ids" value="${escapeHtml(recordId)}" ${isChecked ? "checked" : ""}>`
-        : `<input type="checkbox" ${isChecked ? "checked" : ""} disabled>`;
-
-      return `
-        <tr>
-          <td>${checkbox}</td>
-          <td>${escapeHtml(record.ad)}</td>
-          <td>${escapeHtml(record.soyad)}</td>
-          <td>${escapeHtml(record.tc_kimlik_no)}</td>
-          <td>${Number(record.tutar_usd).toFixed(2)} USD</td>
-          <td>
-            <span class="status-badge ${statusClass(record.islem_durumu)}">
-              ${escapeHtml(record.islem_durumu)}
-            </span>
-          </td>
-          <td class="text-end">${deleteButton(record)}</td>
-        </tr>
-      `;
-    };
-
-    const updatePreservedSelectionInputs = () => {
-      if (!preservedSelectedRecords) {
-        return;
-      }
-      preservedSelectedRecords.innerHTML = "";
-      selectedRecordIds.forEach((recordId) => {
-        const input = document.createElement("input");
-        input.type = "hidden";
-        input.name = "selected_record_ids";
-        input.value = recordId;
-        preservedSelectedRecords.appendChild(input);
-      });
-    };
-
-    const deleteSelectedButton = document.getElementById("delete-selected-records");
-
-    const updateSelectionCount = () => {
-      if (selectedRecordCount) {
-        selectedRecordCount.textContent = String(selectedRecordIds.size);
-      }
-      if (deleteSelectedButton && selectionForm?.querySelector('input[name="batch_id"]')) {
-        deleteSelectedButton.disabled = selectedRecordIds.size === 0;
-        deleteSelectedButton.dataset.confirm = `${selectedRecordIds.size} seçili kayıt veritabanından silinsin mi? Bu işlem geri alınamaz.`;
-      }
-    };
-
-    const updateSelectAllState = () => {
-      if (!selectAll) {
-        return;
-      }
-      const checkboxes = Array.from(document.querySelectorAll(".record-select-checkbox"));
-      selectAll.checked = checkboxes.length > 0 && checkboxes.every((checkbox) => checkbox.checked);
-    };
-
-    const bindRecordCheckboxes = () => {
-      document.querySelectorAll(".record-select-checkbox").forEach((checkbox) => {
-        checkbox.addEventListener("change", () => {
-          if (checkbox.checked) {
-            selectedRecordIds.add(checkbox.value);
-          } else {
-            selectedRecordIds.delete(checkbox.value);
-          }
-          updatePreservedSelectionInputs();
-          updateSelectionCount();
-          updateSelectAllState();
-        });
-      });
-    };
-
-    const renderRecords = (records) => {
-      if (!tableBody) {
-        return;
-      }
-      if (records.length === 0) {
-        tableBody.innerHTML = `
-          <tr>
-            <td colspan="7">
-              <div class="empty-state">Bu filtrelerle kayıt bulunamadı.</div>
-            </td>
-          </tr>
-        `;
-      } else {
-        tableBody.innerHTML = records.map(renderRecordRow).join("");
-      }
-
-      if (visibleRecordCount) {
-        visibleRecordCount.textContent = String(records.length);
-      }
-      if (eligibleRecordCount) {
-        eligibleRecordCount.textContent = String(
-          records.filter((record) => selectableStatuses.has(record.islem_durumu)).length
-        );
-      }
-
-      bindRecordCheckboxes();
-      updateSelectAllState();
-    };
-
-    const syncSelectionHiddenFields = () => {
-      if (!filterForm || !selectionForm) {
-        return;
-      }
-      const formData = new FormData(filterForm);
-      ["status", "q", "sort_by", "sort_dir"].forEach((fieldName) => {
-        const input = selectionForm.querySelector(`input[name="${fieldName}"]`);
-        if (input) {
-          input.value = formData.get(fieldName) || "";
-        }
-      });
-    };
-
-    const filterParams = () => new URLSearchParams(new FormData(filterForm));
-
-    const updateRecordsUrl = () => {
-      const params = filterParams();
-      window.history.replaceState({}, "", `${window.location.pathname}?${params.toString()}`);
-    };
-
-    const fetchRecords = async () => {
-      if (!filterForm) {
-        return;
-      }
-      recordsController?.abort();
-      recordsController = new AbortController();
-      const params = filterParams();
-      syncSelectionHiddenFields();
-      updateRecordsUrl();
-
-      try {
-        const response = await fetch(`/api/records?${params.toString()}`, {
-          signal: recordsController.signal,
-          headers: {"Accept": "application/json"},
-        });
-        if (!response.ok) {
-          filterForm.submit();
-          return;
-        }
-        const data = await response.json();
-        renderRecords(data.records || []);
-      } catch (error) {
-        if (error.name !== "AbortError") {
-          filterForm.submit();
-        }
-      }
-    };
-
-    if (filterForm) {
-      let searchTimeoutId;
-      const batchSelect = filterForm.querySelector("#batch_id");
-      const liveControls = filterForm.querySelectorAll("#status, #sort_by, #sort_dir");
-
-      batchSelect?.addEventListener("change", () => {
-        filterForm.submit();
-      });
-
-      liveControls.forEach((select) => {
-        select.addEventListener("change", fetchRecords);
-      });
-
-      const searchInput = filterForm.querySelector("#q");
-      if (searchInput) {
-        searchInput.addEventListener("input", () => {
-          window.clearTimeout(searchTimeoutId);
-          searchTimeoutId = window.setTimeout(fetchRecords, 150);
-        });
-      }
-    }
-
-    if (selectAll) {
-      selectAll.addEventListener("change", () => {
-        document.querySelectorAll(".record-select-checkbox").forEach((checkbox) => {
-          checkbox.checked = selectAll.checked;
-          if (selectAll.checked) {
-            selectedRecordIds.add(checkbox.value);
-          } else {
-            selectedRecordIds.delete(checkbox.value);
-          }
-        });
-        updatePreservedSelectionInputs();
-        updateSelectionCount();
-        updateSelectAllState();
-      });
-    }
-
-    selectionForm?.addEventListener("submit", () => {
-      syncSelectionHiddenFields();
-      updatePreservedSelectionInputs();
-    });
-
-    bindRecordCheckboxes();
-    updatePreservedSelectionInputs();
-    updateSelectionCount();
-    updateSelectAllState();
-  })();
-</script>
+{{ row_action_form(request.url.path ~ ("?" ~ request.url.query if request.url.query else "")) }}
 {% endblock %}

@@ -355,9 +355,9 @@ Batch sonunda başarılı, hatalı, atlanan ve durdurulan kayıtlar özetlenir. 
 | ![timeout](https://img.shields.io/badge/FAILED_PORTAL_TIMEOUT-timeout-EA580C) | `FAILED_PORTAL_TIMEOUT` | Portal beklenen sürede yanıt vermedi. |
 | ![unknown](https://img.shields.io/badge/FAILED_UNKNOWN-unknown-7F1D1D) | `FAILED_UNKNOWN` | Sınıflandırılamayan kayıt bazlı hata oluştu. |
 | ![abort](https://img.shields.io/badge/ABORTED_SESSION_LOST-kritik_durdu-111827) | `ABORTED_SESSION_LOST` | Oturum veya browser kritik nedenle kaybedildi, batch güvenli durduruldu. |
-| ![review](https://img.shields.io/badge/NEEDS_REVIEW-manuel_kontrol-D97706) | `NEEDS_REVIEW` | "Taslak Kaydet" sonrası sonuç doğrulanamadı veya işlem yarıda kaldı. Taslak oluşmuş olabilir; otomatik yeniden denenmez, portalda kontrol edilip kayıt ekranından sonuçlandırılır. |
+| ![review](https://img.shields.io/badge/NEEDS_REVIEW-manuel_kontrol-D97706) | `NEEDS_REVIEW` | "Taslak Kaydet" sonrası sonuç doğrulanamadı veya işlem yarıda kaldı. Taslak oluşmuş olabilir; otomatik yeniden denenmez, portalda kontrol edilip dönem sayfasındaki "Taslak var" / "Taslak yok" ile sonuçlandırılır. |
 
-Hatalı (`FAILED_*`, `ABORTED_SESSION_LOST`) kayıtlar kayıt ekranındaki "Kontrol ve yeniden deneme" kartından bilinçli olarak `PENDING` durumuna alınabilir. Uygulama açılışında `IN_PROGRESS` kalmış kayıtlar otomatik olarak `NEEDS_REVIEW` durumuna çekilir.
+Hatalı (`FAILED_*`, `ABORTED_SESSION_LOST`) kayıtlar dönem sayfasındaki "Tekrar dene" ile bilinçli olarak `PENDING` durumuna alınabilir. Uygulama açılışında `IN_PROGRESS` kalmış kayıtlar otomatik olarak `NEEDS_REVIEW` durumuna çekilir.
 
 ---
 
@@ -447,7 +447,7 @@ Ana teknolojiler:
 | Python | Uygulama dili. |
 | FastAPI | Lokal web panel ve JSON API. |
 | Jinja2 | Server-rendered HTML ekranlar. |
-| Bootstrap 5 | Panel görünümü ve form/tablo bileşenleri. |
+| Sade CSS | Harici bağımlılık olmadan tek dosyalık panel stili (`static/css/app.css`). |
 | SQLite | Lokal kalıcı veri katmanı. |
 | Pandas / openpyxl | Excel ve CSV okuma. |
 | Playwright | Headful browser otomasyonu. |

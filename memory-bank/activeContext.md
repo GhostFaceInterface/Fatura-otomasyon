@@ -139,3 +139,13 @@ Veritabani goruntuleme ve silme (2026-10-19, branch `fix/batch-reliability`):
 - Guvenlik: IN_PROGRESS kayit asla silinmez; IN_PROGRESS kaydi olan donem silinmez; aktif batch job'un donemi `RecordCleanupService` tarafindan `DeletionBlockedError` ile reddedilir.
 - Silme sadece yerel SQLite'i etkiler; portaldaki taslaklar silinmez. SUCCESS/NEEDS_REVIEW iceren donem/kayit silinirken onay mesaji mukerrer taslak riskini uyarir.
 - Ortak `data-confirm` onay handler'i `base.html` icinde; buton uzerindeki `data-confirm` formdakini ezer.
+
+Arayuz baştan tasarimi (2026-10-19, branch `feat/ui-redesign`, `origin/main` uzerinden):
+
+- Kullanici eski arayuzu karmasik buldu (4 adim, kartlar, uzun aciklamalar, ham status kodlari) ve donem kisilerini goremedigini/silemedigini soyledi. Kok neden kismen: 8010 paneli `/Users/boe747/Project/otomasyon` main'den calisiyor; silme isi baska daldaydi.
+- Yeni bilgi mimarisi donem merkezli: `/` donem listesi, `/periods/{id}` donemin kisileri + tum aksiyonlar (arama/filtre tarayicida, satir: Tekrar dene / Taslak var-yok / Sil; alt cubuk: Secilileri sil, N kisi icin taslak olustur), `/records` tum donemlerde arama, `/upload` -> `/import` -> `/import/confirm` (sonucta "Geri al"), `/portal` oturum.
+- "Secimi kaydet" adimi kalkti: `POST /periods/{id}/draft` secimi kaydedip job'u baslatir.
+- Kaldirilan UI: `/batch*`, `/draft*` (POC), `/records/selection`, `/database`; `/api/*` degismedi.
+- Bootstrap kaldirildi; tek `static/css/app.css`. CSS URL'i dosya mtime'i ile versiyonlanir (`CSS_VERSION`), yoksa tarayici eski CSS'i cache'den veriyordu.
+- Status etiketleri `constants.STATUS_LABELS` (Turkce etiket + rozet tonu), Jinja `status_label`/`status_tone`/`status_group` filtreleri.
+- Satir aksiyon butonlari gizli `#row-action` formuna `form=` + `formaction` ile baglanir (ic ice form olmadan). Ortak submit handler butonlari `setTimeout` ile pasif yapar ki submitter'in name/value'su gonderilsin.

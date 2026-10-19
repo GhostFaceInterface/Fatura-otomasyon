@@ -72,3 +72,34 @@ RETRYABLE_STATUSES = (
     InvoiceStatus.ABORTED_SESSION_LOST,
 )
 STALE_IN_PROGRESS_ERROR_CODE = "StaleInProgressRecovered"
+
+# Operator-facing label and badge tone for each status. Raw codes stay in the DB
+# and API; the UI shows these.
+STATUS_LABELS: dict[InvoiceStatus, tuple[str, str]] = {
+    InvoiceStatus.PENDING: ("Bekliyor", "neutral"),
+    InvoiceStatus.SELECTED: ("Seçildi", "info"),
+    InvoiceStatus.IN_PROGRESS: ("İşleniyor", "info"),
+    InvoiceStatus.SUCCESS_DRAFT_CREATED: ("Taslak oluştu", "success"),
+    InvoiceStatus.FAILED_INVALID_TCKN: ("Hata: TCKN geçersiz", "danger"),
+    InvoiceStatus.FAILED_NAME_MISMATCH: ("Hata: isim uyuşmuyor", "danger"),
+    InvoiceStatus.FAILED_TURMOB_SERVICE_ERROR: ("Hata: Turmob servisi", "danger"),
+    InvoiceStatus.SKIPPED_EFATURA_MUKELLEFI: ("Atlandı: e-Fatura mükellefi", "warning"),
+    InvoiceStatus.FAILED_PORTAL_TIMEOUT: ("Hata: portal zaman aşımı", "danger"),
+    InvoiceStatus.FAILED_UNKNOWN: ("Hata: bilinmeyen", "danger"),
+    InvoiceStatus.ABORTED_SESSION_LOST: ("Yarıda kaldı: oturum düştü", "danger"),
+    InvoiceStatus.NEEDS_REVIEW: ("Kontrol gerekli", "warning"),
+}
+
+
+def status_label(status: str) -> str:
+    """Return the Turkish label for a status code, or the code itself if unknown."""
+
+    entry = STATUS_LABELS.get(status)  # StrEnum keys match plain strings
+    return entry[0] if entry else str(status)
+
+
+def status_tone(status: str) -> str:
+    """Return the badge tone for a status code."""
+
+    entry = STATUS_LABELS.get(status)
+    return entry[1] if entry else "neutral"

@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Portal · e-Arşiv Taslak{% endblock %}
+
+{% block content %}
+{% set status = portal_state.status %}
+<div class="page-head">
+  <div>
+    <h1>Portal oturumu</h1>
+    <p class="sub">
+      Durum:
+      <span class="badge {% if status == 'READY' %}tone-success{% elif status == 'FAILED' %}tone-danger{% elif status in ['BROWSER_OPENING', 'LOGIN_SUBMITTED', 'TWO_FACTOR_WAITING'] %}tone-warning{% else %}tone-neutral{% endif %}" title="{{ status }}">
+        {% if status == 'READY' %}Hazır{% elif status == 'TWO_FACTOR_WAITING' %}2FA kodu bekleniyor{% elif status == 'FAILED' %}Hata{% elif status in ['BROWSER_OPENING', 'LOGIN_SUBMITTED'] %}Bağlanıyor{% else %}Kapalı{% endif %}
+      </span>
+      {% if portal_state.message %}<span class="muted">· {{ portal_state.message }}</span>{% endif %}
+    </p>
+  </div>
+</div>
+
+<div class="row" style="margin-bottom: 24px">
+  <form action="/session/start" method="post"><button type="submit" class="btn {% if status != 'READY' and status != 'TWO_FACTOR_WAITING' %}btn-primary{% endif %}">Giriş yap</button></form>
+  <form action="/session/verify" method="post"><button type="submit" class="btn {% if status == 'TWO_FACTOR_WAITING' %}btn-primary{% endif %}">2FA kodunu girdim</button></form>
+  <form action="/session/close" method="post"><button type="submit" class="btn">Tarayıcıyı kapat</button></form>
+</div>
+
+<ol class="steps muted">
+  <li><strong>Giriş yap</strong>'a bas; tarayıcı açılır ve kullanıcı bilgileri doldurulur.</li>
+  <li>Kod istenirse açılan tarayıcıya gir, sonra <strong>2FA kodunu girdim</strong>'e bas.</li>
+  <li>Durum <strong>Hazır</strong> olunca döneme dönüp taslak oluşturabilirsin.</li>
+</ol>
+{% endblock %}

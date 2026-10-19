@@ -1,4 +1,9 @@
-"""Server-rendered UI routes."""
+"""Server-rendered UI routes.
+
+The panel is organised around fatura dönemleri (import batches): the home page
+lists them, a period page lists its people and runs every action on them. All
+POST actions redirect back with a one-line flash message.
+"""
 
 from __future__ import annotations
 
@@ -6,7 +11,8 @@ from datetime import UTC, datetime
 import logging
 from pathlib import Path
 import shutil
-from urllib.parse import urlencode
+from typing import Any
+from urllib.parse import parse_qsl, urlencode
 
 from fastapi import APIRouter, File, Form, Query, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -14,13 +20,17 @@ from fastapi.templating import Jinja2Templates
 
 from invoice_automation.app.automation.session_manager import portal_session_manager
 from invoice_automation.app.config import ROOT_DIR, ensure_runtime_directories, settings
-from invoice_automation.app.constants import RETRYABLE_STATUSES, InvoiceStatus
+from invoice_automation.app.constants import (
+    BATCH_ELIGIBLE_STATUSES,
+    RETRYABLE_STATUSES,
+    InvoiceStatus,
+    status_label,
+    status_tone,
+)
+from invoice_automation.app.db.models import InvoiceRecord
 from invoice_automation.app.db.repository import InvoiceRecordRepository
-from invoice_automation.app.schemas.batch import BatchPreview
 from invoice_automation.app.services.batch_job_service import batch_job_manager
-from invoice_automation.app.services.batch_service import BatchService
 from invoice_automation.app.services.cleanup_service import RecordCleanupService
-from invoice_automation.app.services.draft_service import SingleDraftService
 from invoice_automation.app.services.import_service import ImportService, normalize_column_name
 from invoice_automation.app.services.selection_service import SelectionService
 from invoice_automation.app.utils.exceptions import (
@@ -35,39 +45,253 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["ui"])
 templates = Jinja2Templates(directory=str(ROOT_DIR / "invoice_automation" / "app" / "templates"))
 
-RECORD_SORT_OPTIONS = (
-    ("id", "Kayıt sırası"),
-    ("ad", "Ad"),
-    ("soyad", "Soyad"),
-    ("tc_kimlik_no", "TC kimlik no"),
-    ("tutar_usd", "Tutar"),
+ELIGIBLE_STATUS_VALUES = frozenset(status.value for status in BATCH_ELIGIBLE_STATUSES)
+RETRYABLE_STATUS_VALUES = frozenset(status.value for status in RETRYABLE_STATUSES)
+STATUS_GROUPS = (
+    ("waiting", "Bekliyor"),
+    ("success", "Taslak oluştu"),
+    ("failed", "Hatalı / atlandı"),
+    ("review", "Kontrol gerekli"),
+    ("progress", "İşleniyor"),
 )
-RECORD_SORT_KEYS = {key for key, _label in RECORD_SORT_OPTIONS}
+
+
+def status_group(status: str) -> str:
+    """Bucket a status into the filter groups shown in the UI."""
+
+    if status in ELIGIBLE_STATUS_VALUES:
+        return "waiting"
+    if status == InvoiceStatus.SUCCESS_DRAFT_CREATED:
+        return "success"
+    if status == InvoiceStatus.NEEDS_REVIEW:
+        return "review"
+    if status == InvoiceStatus.IN_PROGRESS:
+        return "progress"
+    return "failed"
+
+
+templates.env.filters["status_label"] = status_label
+templates.env.filters["status_tone"] = status_tone
+templates.env.filters["status_group"] = status_group
+templates.env.globals["RETRYABLE_STATUS_VALUES"] = RETRYABLE_STATUS_VALUES
+templates.env.globals["STATUS_GROUPS"] = STATUS_GROUPS
+# Changes with the stylesheet so browsers never keep a stale cached copy.
+templates.env.globals["CSS_VERSION"] = int(
+    (ROOT_DIR / "invoice_automation" / "app" / "static" / "css" / "app.css").stat().st_mtime
+)
+
+
+# --- Dönemler -----------------------------------------------------------------
 
 
 @router.get("/", response_class=HTMLResponse)
-def index(request: Request) -> HTMLResponse:
-    """Render the file upload page."""
+def periods(request: Request) -> HTMLResponse:
+    """List every fatura period with its record counts."""
 
-    return templates.TemplateResponse(
-        "index.html",
-        {
-            "request": request,
-            "result": None,
-            "error": None,
-            "batches": InvoiceRecordRepository().list_import_batches(),
-        },
+    repository = InvoiceRecordRepository()
+    return _render(
+        request,
+        "periods.html",
+        summaries=repository.list_import_batch_summaries(),
+        unassigned_count=repository.count_unassigned_records(),
+        running_batch_id=_running_batch_id(),
     )
+
+
+@router.get("/periods/{batch_id}", response_class=HTMLResponse, response_model=None)
+def period(request: Request, batch_id: int) -> HTMLResponse | RedirectResponse:
+    """Show the people of one period and every action on them."""
+
+    repository = InvoiceRecordRepository()
+    batch = repository.get_import_batch(batch_id)
+    if batch is None:
+        return _redirect("/", "Dönem bulunamadı.", error=True)
+
+    records = repository.list_all(batch_id=batch_id, sort_by="id", sort_dir="asc")
+    job = batch_job_manager.current_job()
+    period_job = job if job is not None and job.batch_id == batch_id else None
+    return _render(
+        request,
+        "period.html",
+        batch=batch,
+        records=records,
+        counts=_group_counts(records),
+        total_usd=sum(record.tutar_usd for record in records),
+        job=period_job.to_dict() if period_job is not None else None,
+        report=period_job.report if period_job is not None and not period_job.is_active else None,
+        other_job_running=job is not None and job.is_active and period_job is None,
+        session_ready=portal_session_manager.state.status == "READY",
+    )
+
+
+@router.post("/periods/{batch_id}/delete")
+def delete_period(batch_id: int) -> RedirectResponse:
+    """Delete a period and all of its records."""
+
+    try:
+        deleted = RecordCleanupService().delete_batch(batch_id)
+    except DeletionBlockedError as exc:
+        return _redirect(f"/periods/{batch_id}", str(exc), error=True)
+    if deleted is None:
+        return _redirect("/", "Dönem bulunamadı.", error=True)
+    return _redirect("/", f"Dönem silindi ({deleted} kişi).")
+
+
+@router.post("/periods/{batch_id}/records/delete")
+def delete_period_records(
+    batch_id: int,
+    record_ids: list[int] | None = Form(default=None),
+) -> RedirectResponse:
+    """Delete the checked people of a period."""
+
+    try:
+        deleted = RecordCleanupService().delete_records(record_ids or [], batch_id=batch_id)
+    except DeletionBlockedError as exc:
+        return _redirect(f"/periods/{batch_id}", str(exc), error=True)
+    return _redirect(f"/periods/{batch_id}", f"{deleted} kişi silindi.")
+
+
+@router.post("/periods/{batch_id}/draft")
+def start_drafts(
+    batch_id: int,
+    record_ids: list[int] | None = Form(default=None),
+) -> RedirectResponse:
+    """Select the checked people and start the background draft job."""
+
+    target = f"/periods/{batch_id}"
+    if portal_session_manager.state.status != "READY":
+        return _redirect(target, "Portal oturumu hazır değil. Önce Portal sayfasından giriş yap.", error=True)
+    if batch_job_manager.is_running():
+        return _redirect(target, "Başka bir taslak işlemi çalışıyor.", error=True)
+
+    repository = InvoiceRecordRepository()
+    SelectionService(repository=repository).save_selection(record_ids or [], batch_id=batch_id)
+    if not repository.list_selected_for_batch(batch_id=batch_id):
+        return _redirect(target, "Seçilenler arasında taslak oluşturulabilecek kişi yok.", error=True)
+    try:
+        batch_job_manager.start(batch_id)
+    except (BatchJobAlreadyRunningError, PortalSessionError) as exc:
+        logger.warning("Batch job baslatilamadi | batch_id=%s error=%s", batch_id, exc)
+        return _redirect(target, str(exc), error=True)
+    return _redirect(target)
+
+
+@router.post("/periods/{batch_id}/cancel")
+def cancel_drafts(batch_id: int) -> RedirectResponse:
+    """Stop the running job after the current person."""
+
+    batch_job_manager.cancel()
+    return _redirect(f"/periods/{batch_id}", "Durdurma istendi; işlenen kişi bitince duracak.")
+
+
+@router.post("/unassigned/delete")
+def delete_unassigned_records() -> RedirectResponse:
+    """Delete records that belong to no period."""
+
+    try:
+        deleted = RecordCleanupService().delete_unassigned_records()
+    except DeletionBlockedError as exc:
+        return _redirect("/", str(exc), error=True)
+    return _redirect("/", f"Döneme bağlı olmayan {deleted} kayıt silindi.")
+
+
+# --- Tüm kayıtlar ---------------------------------------------------------------
+
+
+@router.get("/records", response_class=HTMLResponse)
+def all_records(
+    request: Request,
+    q: str = Query(default=""),
+    group: str = Query(default=""),
+    period: str = Query(default=""),
+) -> HTMLResponse:
+    """Search people across every period."""
+
+    repository = InvoiceRecordRepository()
+    batches = repository.list_import_batches(include_archived=True)
+    period_id = int(period) if period.isdigit() else None
+    records = repository.list_all(batch_id=period_id, search=q or None, sort_by="id", sort_dir="desc")
+    if group:
+        records = [record for record in records if status_group(record.islem_durumu) == group]
+    return _render(
+        request,
+        "records.html",
+        records=records,
+        batches=batches,
+        batch_names={batch.id: batch.name for batch in batches},
+        q=q,
+        group=group,
+        period_id=period_id,
+    )
+
+
+@router.post("/records/{record_id}/retry")
+def retry_record(record_id: int, next: str = Form(default="/")) -> RedirectResponse:
+    """Return a failed record to Bekliyor so it can be processed again."""
+
+    reset = InvoiceRecordRepository().reset_failed_to_pending([record_id])
+    if not reset:
+        return _redirect(next, "Bu kayıt tekrar denenemez.", error=True)
+    return _redirect(next, "Kayıt tekrar Bekliyor durumuna alındı.")
+
+
+@router.post("/records/{record_id}/review")
+def review_record(
+    record_id: int,
+    draft_exists: str = Form(...),
+    next: str = Form(default="/"),
+) -> RedirectResponse:
+    """Close a 'Kontrol gerekli' record after checking the portal by hand."""
+
+    exists = draft_exists == "1"
+    resolved = InvoiceRecordRepository().resolve_needs_review(record_id, draft_exists=exists)
+    logger.info(
+        "NEEDS_REVIEW kaydi manuel sonuclandirildi | record_id=%s draft_exists=%s resolved=%s",
+        record_id,
+        exists,
+        resolved is not None,
+    )
+    if resolved is None:
+        return _redirect(next, "Kayıt artık kontrol bekleyen durumda değil.", error=True)
+    message = "Taslak oluştu olarak işaretlendi." if exists else "Kayıt tekrar Bekliyor durumuna alındı."
+    return _redirect(next, message)
+
+
+@router.post("/records/{record_id}/delete")
+def delete_record(record_id: int, next: str = Form(default="/")) -> RedirectResponse:
+    """Delete one record."""
+
+    repository = InvoiceRecordRepository()
+    record = repository.get(record_id)
+    if record is None:
+        return _redirect(next, "Kayıt bulunamadı.", error=True)
+    try:
+        deleted = RecordCleanupService(repository=repository).delete_records(
+            [record_id], batch_id=record.batch_id
+        )
+    except DeletionBlockedError as exc:
+        return _redirect(next, str(exc), error=True)
+    if not deleted:
+        return _redirect(next, "İşlenmekte olan kayıt silinemez.", error=True)
+    return _redirect(next, f"{record.ad} {record.soyad} silindi.")
+
+
+# --- Dosya yükleme --------------------------------------------------------------
+
+
+@router.get("/upload", response_class=HTMLResponse)
+def upload(request: Request) -> HTMLResponse:
+    """Render the file upload form."""
+
+    return _render(request, "upload.html", error=None)
 
 
 @router.post("/import", response_class=HTMLResponse)
 def import_records(request: Request, file: UploadFile = File(...)) -> HTMLResponse:
-    """Receive a CSV/Excel file and show sheet/mapping options."""
+    """Receive a CSV/Excel file and show the sheet/column mapping form."""
 
     ensure_runtime_directories()
     saved_path = _save_upload(file)
-    error = None
-
     try:
         inspection = ImportService().inspect_file(saved_path)
         return _render_import_mapping(request, saved_path, inspection)
@@ -76,17 +300,8 @@ def import_records(request: Request, file: UploadFile = File(...)) -> HTMLRespon
         logger.info("Import rejected | file=%s error=%s", file.filename, error)
     except Exception:
         logger.exception("Unexpected import error | file=%s", file.filename)
-        error = "Dosya islenirken beklenmeyen bir hata olustu. Detaylar log dosyasina yazildi."
-
-    return templates.TemplateResponse(
-        "index.html",
-        {
-            "request": request,
-            "result": None,
-            "error": error,
-            "batches": InvoiceRecordRepository().list_import_batches(),
-        },
-    )
+        error = "Dosya okunamadı. Ayrıntı log dosyasında."
+    return _render(request, "upload.html", error=error)
 
 
 @router.post("/import/inspect", response_class=HTMLResponse)
@@ -95,24 +310,14 @@ def inspect_import_sheet(
     saved_path: str = Form(...),
     sheet_name: str = Form(...),
 ) -> HTMLResponse:
-    """Reload mapping form for the selected sheet."""
+    """Reload the mapping form for another sheet."""
 
-    error = None
     try:
         file_path = _resolve_import_path(saved_path)
         inspection = ImportService().inspect_file(file_path, sheet_name=sheet_name)
         return _render_import_mapping(request, file_path, inspection)
     except ImportValidationError as exc:
-        error = str(exc)
-    return templates.TemplateResponse(
-        "index.html",
-        {
-            "request": request,
-            "result": None,
-            "error": error,
-            "batches": InvoiceRecordRepository().list_import_batches(),
-        },
-    )
+        return _render(request, "upload.html", error=str(exc))
 
 
 @router.post("/import/confirm", response_class=HTMLResponse)
@@ -127,10 +332,8 @@ def confirm_import(
     map_tutar_usd: str = Form(...),
     map_aciklama: str = Form(default=""),
 ) -> HTMLResponse:
-    """Import the selected sheet using explicit column mapping and batch name."""
+    """Import the sheet with the chosen columns into a new period."""
 
-    result = None
-    error = None
     try:
         file_path = _resolve_import_path(saved_path)
         result = ImportService().import_file(
@@ -146,393 +349,97 @@ def confirm_import(
             },
         )
     except ImportValidationError as exc:
-        error = str(exc)
-        logger.info("Mapped import rejected | file=%s error=%s", saved_path, error)
+        logger.info("Mapped import rejected | file=%s error=%s", saved_path, exc)
+        return _render(request, "upload.html", error=str(exc))
     except Exception:
         logger.exception("Unexpected mapped import error | file=%s", saved_path)
-        error = "Dosya islenirken beklenmeyen bir hata olustu. Detaylar log dosyasina yazildi."
+        return _render(request, "upload.html", error="Dosya içe aktarılamadı. Ayrıntı log dosyasında.")
+    return _render(request, "import_result.html", result=result)
+
+
+# --- Portal oturumu ---------------------------------------------------------------
+
+
+@router.get("/portal", response_class=HTMLResponse)
+def portal(request: Request) -> HTMLResponse:
+    """Render the portal session page."""
+
+    return _render(request, "portal.html")
+
+
+@router.post("/session/start")
+def start_session() -> RedirectResponse:
+    """Open the browser and fill in the login form."""
+
+    return _session_action(portal_session_manager.start_login, "Portal girişi başlatılamadı")
+
+
+@router.post("/session/verify")
+def verify_session() -> RedirectResponse:
+    """Check that manual 2FA is complete and the session is ready."""
+
+    return _session_action(portal_session_manager.confirm_manual_2fa_completed, "Oturum doğrulanamadı")
+
+
+@router.post("/session/close")
+def close_session() -> RedirectResponse:
+    """Close the browser."""
+
+    return _session_action(portal_session_manager.close, "Tarayıcı kapatılamadı")
+
+
+# --- Yardımcılar ------------------------------------------------------------------
+
+
+def _render(request: Request, template: str, **context: Any) -> HTMLResponse:
+    """Render a page with the shared header state and flash message."""
 
     return templates.TemplateResponse(
-        "index.html",
+        template,
         {
             "request": request,
-            "result": result,
-            "error": error,
-            "batches": InvoiceRecordRepository().list_import_batches(),
+            "portal_state": portal_session_manager.state,
+            "flash": request.query_params.get("msg"),
+            "flash_error": request.query_params.get("err") == "1",
+            **context,
         },
     )
 
 
-@router.get("/records", response_class=HTMLResponse)
-def records(
-    request: Request,
-    status: str | None = Query(default=None),
-    q: str | None = Query(default=None),
-    sort_by: str = Query(default="id"),
-    sort_dir: str = Query(default="desc"),
-) -> HTMLResponse:
-    """Render invoice records as a table."""
+def _redirect(target: str, message: str | None = None, *, error: bool = False) -> RedirectResponse:
+    """Redirect to a local path, keeping its query and adding an optional flash message."""
 
-    status = status or None
-    q = q or None
-    sort_by = sort_by if sort_by in RECORD_SORT_KEYS else "id"
-    sort_dir = "asc" if sort_dir == "asc" else "desc"
-    repository = InvoiceRecordRepository()
-    active_batch = _active_batch(repository, request.query_params.get("batch_id"))
-    active_batch_id = active_batch.id if active_batch else None
-    invoice_records = (
-        repository.list_all(
-            status=status,
-            batch_id=active_batch_id,
-            search=q,
-            sort_by=sort_by,
-            sort_dir=sort_dir,
-        )
-        if active_batch_id is not None
-        else []
-    )
-    statuses = [status_value.value for status_value in InvoiceStatus]
-    selected_record_ids = [record.id for record in repository.list_selected(batch_id=active_batch_id)]
-    visible_record_ids = [record.id for record in invoice_records]
-    selected_count = len(selected_record_ids)
-    eligible_count = len(
-        [
-            record
-            for record in invoice_records
-            if record.islem_durumu in {InvoiceStatus.PENDING.value, InvoiceStatus.SELECTED.value}
-        ]
-    )
-    return templates.TemplateResponse(
-        "records.html",
-        {
-            "request": request,
-            "records": invoice_records,
-            "batches": repository.list_import_batches(),
-            "active_batch": active_batch,
-            "selected_status": status,
-            "search_query": q or "",
-            "selected_record_ids": selected_record_ids,
-            "visible_record_ids": visible_record_ids,
-            "sort_options": RECORD_SORT_OPTIONS,
-            "selected_sort_by": sort_by,
-            "selected_sort_dir": sort_dir,
-            "statuses": statuses,
-            "selected_count": selected_count,
-            "eligible_count": eligible_count,
-            "selection_saved": request.query_params.get("selection_saved") == "1",
-            "review_records": (
-                repository.list_by_statuses((InvoiceStatus.NEEDS_REVIEW,), batch_id=active_batch_id)
-                if active_batch_id is not None
-                else []
-            ),
-            "retryable_records": (
-                repository.list_by_statuses(RETRYABLE_STATUSES, batch_id=active_batch_id)
-                if active_batch_id is not None
-                else []
-            ),
-            "record_action_message": request.query_params.get("record_action"),
-            "record_action_error": request.query_params.get("error"),
-            "deleted_count": request.query_params.get("deleted"),
-        },
-    )
+    # Only same-site paths; "//host" would leave the panel.
+    if not target.startswith("/") or target.startswith("//"):
+        target = "/"
+    path, _, raw_query = target.partition("?")
+    query = {key: value for key, value in parse_qsl(raw_query) if key not in {"msg", "err"}}
+    if message:
+        query["msg"] = message
+        if error:
+            query["err"] = "1"
+    return RedirectResponse(url=f"{path}?{urlencode(query)}" if query else path, status_code=303)
 
 
-@router.post("/records/selection")
-def save_selection(
-    batch_id: int = Form(...),
-    selected_record_ids: list[int] | None = Form(default=None),
-    status: str = Form(default=""),
-    q: str = Form(default=""),
-    sort_by: str = Form(default="id"),
-    sort_dir: str = Form(default="desc"),
-) -> RedirectResponse:
-    """Persist selected records from the records screen."""
-
-    selected_records = SelectionService().save_selection(selected_record_ids or [], batch_id=batch_id)
-    query = {
-        "batch_id": batch_id,
-        "selection_saved": "1",
-        "selected_count": len(selected_records),
-    }
-    if status:
-        query["status"] = status
-    if q:
-        query["q"] = q
-    if sort_by:
-        query["sort_by"] = sort_by
-    if sort_dir:
-        query["sort_dir"] = sort_dir
-    return RedirectResponse(
-        url=f"/records?{urlencode(query)}",
-        status_code=303,
-    )
+def _session_action(action, failure_message: str) -> RedirectResponse:
+    try:
+        action()
+    except PortalSessionError as exc:
+        logger.exception(failure_message)
+        return _redirect("/portal", f"{failure_message}: {exc}", error=True)
+    return _redirect("/portal")
 
 
-@router.post("/records/{record_id}/retry")
-def retry_failed_record(record_id: int, batch_id: int = Form(...)) -> RedirectResponse:
-    """Consciously return one failed record to PENDING."""
-
-    reset_count = InvoiceRecordRepository().reset_failed_to_pending([record_id])
-    logger.info("Kayit yeniden denemeye alindi | record_id=%s reset=%s", record_id, reset_count)
-    return _redirect_to_records(batch_id, "retry_ok" if reset_count else "retry_rejected")
-
-
-@router.post("/records/retry-failed")
-def retry_all_failed_records(batch_id: int = Form(...)) -> RedirectResponse:
-    """Consciously return every retryable failed record of a batch to PENDING."""
-
-    repository = InvoiceRecordRepository()
-    record_ids = [record.id for record in repository.list_by_statuses(RETRYABLE_STATUSES, batch_id=batch_id)]
-    reset_count = repository.reset_failed_to_pending(record_ids)
-    logger.info("Hatali kayitlar yeniden denemeye alindi | batch_id=%s reset=%s", batch_id, reset_count)
-    return _redirect_to_records(batch_id, "retry_ok" if reset_count else "retry_rejected")
-
-
-@router.post("/records/{record_id}/review")
-def resolve_review_record(
-    record_id: int,
-    batch_id: int = Form(...),
-    draft_exists: str = Form(...),
-) -> RedirectResponse:
-    """Close a NEEDS_REVIEW record after the operator checked the portal by hand."""
-
-    exists = draft_exists == "1"
-    resolved = InvoiceRecordRepository().resolve_needs_review(record_id, draft_exists=exists)
-    logger.info(
-        "NEEDS_REVIEW kaydi manuel sonuclandirildi | record_id=%s draft_exists=%s resolved=%s",
-        record_id,
-        exists,
-        resolved is not None,
-    )
-    return _redirect_to_records(batch_id, "review_ok" if resolved else "review_rejected")
-
-
-@router.post("/records/delete")
-def delete_selected_records(
-    batch_id: int = Form(...),
-    selected_record_ids: list[int] | None = Form(default=None),
-) -> RedirectResponse:
-    """Delete the records checked on the records screen."""
-
-    return _delete_records(batch_id, selected_record_ids or [])
-
-
-@router.post("/records/{record_id}/delete")
-def delete_record(record_id: int, batch_id: int = Form(...)) -> RedirectResponse:
-    """Delete one record of the active fatura period."""
-
-    return _delete_records(batch_id, [record_id])
-
-
-@router.get("/database", response_class=HTMLResponse)
-def database(request: Request) -> HTMLResponse:
-    """Render an overview of every fatura period stored in the local database."""
-
-    repository = InvoiceRecordRepository()
-    summaries = repository.list_import_batch_summaries()
+def _running_batch_id() -> int | None:
     job = batch_job_manager.current_job()
-    return templates.TemplateResponse(
-        "database.html",
-        {
-            "request": request,
-            "summaries": summaries,
-            "total_records": repository.count(),
-            "total_usd": sum(summary.total_usd for summary in summaries),
-            "unassigned_count": repository.count_unassigned_records(),
-            "database_path": settings.database_path,
-            "running_batch_id": job.batch_id if job is not None and job.is_active else None,
-            "db_action": request.query_params.get("db_action"),
-            "deleted_count": request.query_params.get("deleted"),
-            "error": request.query_params.get("error"),
-        },
-    )
+    return job.batch_id if job is not None and job.is_active else None
 
 
-@router.post("/batches/{batch_id}/delete")
-def delete_batch(batch_id: int) -> RedirectResponse:
-    """Delete a fatura period and all of its records."""
-
-    try:
-        deleted = RecordCleanupService().delete_batch(batch_id)
-    except DeletionBlockedError as exc:
-        return _redirect_to_database("blocked", error=str(exc))
-    if deleted is None:
-        return _redirect_to_database("batch_missing")
-    return _redirect_to_database("batch_deleted", deleted=deleted)
-
-
-@router.post("/database/unassigned/delete")
-def delete_unassigned_records() -> RedirectResponse:
-    """Delete records that belong to no fatura period."""
-
-    try:
-        deleted = RecordCleanupService().delete_unassigned_records()
-    except DeletionBlockedError as exc:
-        return _redirect_to_database("blocked", error=str(exc))
-    return _redirect_to_database("unassigned_deleted", deleted=deleted)
-
-
-@router.get("/batch", response_class=HTMLResponse)
-def batch(request: Request) -> HTMLResponse:
-    """Render selected records prepared for batch processing."""
-
-    repository = InvoiceRecordRepository()
-    active_batch = _active_batch(repository, request.query_params.get("batch_id"))
-    return _render_batch(request, repository, active_batch)
-
-
-@router.post("/batch/prepare", response_class=HTMLResponse)
-def prepare_batch(request: Request, batch_id: int = Form(...)) -> HTMLResponse:
-    """Prepare selected records for the future automation batch."""
-
-    repository = InvoiceRecordRepository()
-    active_batch = repository.get_import_batch(batch_id)
-    return _render_batch(request, repository, active_batch, prepared=True)
-
-
-@router.post("/batch/run", response_class=HTMLResponse, response_model=None)
-def run_batch(request: Request, batch_id: int = Form(...)) -> HTMLResponse | RedirectResponse:
-    """Start the batch as a background job and return immediately."""
-
-    repository = InvoiceRecordRepository()
-    try:
-        batch_job_manager.start(batch_id)
-    except (BatchJobAlreadyRunningError, PortalSessionError) as exc:
-        logger.warning("Batch job baslatilamadi | batch_id=%s error=%s", batch_id, exc)
-        return _render_batch(request, repository, repository.get_import_batch(batch_id), error=str(exc))
-    return RedirectResponse(url=f"/batch?{urlencode({'batch_id': batch_id})}", status_code=303)
-
-
-@router.post("/batch/cancel")
-def cancel_batch(batch_id: int = Form(...)) -> RedirectResponse:
-    """Request cancellation of the running batch job."""
-
-    batch_job_manager.cancel()
-    return RedirectResponse(url=f"/batch?{urlencode({'batch_id': batch_id})}", status_code=303)
-
-
-@router.get("/draft", response_class=HTMLResponse)
-def draft(request: Request) -> HTMLResponse:
-    """Render single-record draft creation POC screen."""
-
-    repository = InvoiceRecordRepository()
-    selected_records = repository.list_selected()
-    records = selected_records or repository.list_all()
-    return templates.TemplateResponse(
-        "draft.html",
-        {
-            "request": request,
-            "records": records,
-            "using_selected_records": bool(selected_records),
-            "result": None,
-            "error": None,
-        },
-    )
-
-
-@router.post("/draft/create", response_class=HTMLResponse)
-def create_single_draft(request: Request, record_id: int = Form(...)) -> HTMLResponse:
-    """Run Phase 4 POC for one selected record."""
-
-    repository = InvoiceRecordRepository()
-    result = None
-    error = None
-    try:
-        result = SingleDraftService(repository=repository).create_for_record(record_id)
-    except (ValueError, PortalSessionError) as exc:
-        error = str(exc)
-        logger.info("Draft POC rejected | record_id=%s error=%s", record_id, error)
-
-    selected_records = repository.list_selected()
-    records = selected_records or repository.list_all()
-    return templates.TemplateResponse(
-        "draft.html",
-        {
-            "request": request,
-            "records": records,
-            "using_selected_records": bool(selected_records),
-            "result": result,
-            "error": error,
-        },
-    )
-
-
-@router.get("/session", response_class=HTMLResponse)
-def session(request: Request) -> HTMLResponse:
-    """Render browser session management screen."""
-
-    return templates.TemplateResponse(
-        "session.html",
-        {
-            "request": request,
-            "state": portal_session_manager.state,
-            "error": None,
-        },
-    )
-
-
-@router.post("/session/start", response_class=HTMLResponse)
-def start_session(request: Request) -> HTMLResponse:
-    """Start browser and advance login flow to the manual 2FA screen."""
-
-    error = None
-    try:
-        state = portal_session_manager.start_login()
-    except PortalSessionError as exc:
-        logger.exception("Portal session start failed")
-        state = portal_session_manager.state
-        error = str(exc)
-
-    return templates.TemplateResponse(
-        "session.html",
-        {
-            "request": request,
-            "state": state,
-            "error": error,
-        },
-    )
-
-
-@router.post("/session/verify", response_class=HTMLResponse)
-def verify_session(request: Request) -> HTMLResponse:
-    """Confirm that manual 2FA is complete and the session is ready."""
-
-    error = None
-    try:
-        state = portal_session_manager.confirm_manual_2fa_completed()
-    except PortalSessionError as exc:
-        logger.exception("Portal session verification failed")
-        state = portal_session_manager.state
-        error = str(exc)
-
-    return templates.TemplateResponse(
-        "session.html",
-        {
-            "request": request,
-            "state": state,
-            "error": error,
-        },
-    )
-
-
-@router.post("/session/close", response_class=HTMLResponse)
-def close_session(request: Request) -> HTMLResponse:
-    """Close the active browser session."""
-
-    error = None
-    try:
-        state = portal_session_manager.close()
-    except PortalSessionError as exc:
-        state = portal_session_manager.state
-        error = str(exc)
-    return templates.TemplateResponse(
-        "session.html",
-        {
-            "request": request,
-            "state": state,
-            "error": error,
-        },
-    )
+def _group_counts(records: list[InvoiceRecord]) -> dict[str, int]:
+    counts = {key: 0 for key, _label in STATUS_GROUPS}
+    for record in records:
+        counts[status_group(record.islem_durumu)] += 1
+    return counts
 
 
 def _save_upload(file: UploadFile) -> Path:
@@ -551,16 +458,12 @@ def _save_upload(file: UploadFile) -> Path:
 def _render_import_mapping(request: Request, saved_path: Path, inspection) -> HTMLResponse:
     """Render the mapping form for an uploaded import file."""
 
-    return templates.TemplateResponse(
+    return _render(
+        request,
         "import_mapping.html",
-        {
-            "request": request,
-            "saved_path": str(saved_path),
-            "inspection": inspection,
-            "default_mapping": _default_mapping(inspection.columns),
-            "required_fields": ("ad", "soyad", "tc_kimlik_no", "tutar_usd"),
-            "optional_fields": ("aciklama",),
-        },
+        saved_path=str(saved_path),
+        inspection=inspection,
+        default_mapping=_default_mapping(inspection.columns),
     )
 
 
@@ -584,71 +487,3 @@ def _resolve_import_path(saved_path: str) -> Path:
     if resolved != import_root and import_root not in resolved.parents:
         raise ImportValidationError("Gecersiz import dosya yolu.")
     return resolved
-
-
-def _active_batch(repository: InvoiceRecordRepository, raw_batch_id: str | None):
-    if raw_batch_id:
-        try:
-            return repository.get_import_batch(int(raw_batch_id))
-        except ValueError:
-            return None
-    return repository.latest_import_batch()
-
-
-def _render_batch(
-    request: Request,
-    repository: InvoiceRecordRepository,
-    active_batch,
-    *,
-    prepared: bool = False,
-    error: str | None = None,
-) -> HTMLResponse:
-    active_batch_id = active_batch.id if active_batch else None
-    preview = (
-        BatchService(repository=repository).preview(batch_id=active_batch_id)
-        if active_batch_id is not None
-        else _empty_batch_preview()
-    )
-    job = batch_job_manager.current_job()
-    job_running = job is not None and job.is_active
-    # Only show the job that belongs to the dönem on screen.
-    visible_job = job if job is not None and job.batch_id == active_batch_id else None
-    report = visible_job.report if visible_job is not None and not visible_job.is_active else None
-    return templates.TemplateResponse(
-        "batch.html",
-        {
-            "request": request,
-            "preview": preview,
-            "batches": repository.list_import_batches(),
-            "active_batch": active_batch,
-            "prepared": prepared,
-            "report": report,
-            "job": visible_job.to_dict() if visible_job is not None else None,
-            "job_running": job_running,
-            "error": error,
-            "session_state": portal_session_manager.state,
-            "session_ready": portal_session_manager.state.status == "READY",
-        },
-    )
-
-
-def _redirect_to_records(batch_id: int, record_action: str, **extra: object) -> RedirectResponse:
-    query = urlencode({"batch_id": batch_id, "record_action": record_action, **extra})
-    return RedirectResponse(url=f"/records?{query}", status_code=303)
-
-
-def _redirect_to_database(db_action: str, **extra: object) -> RedirectResponse:
-    query = urlencode({"db_action": db_action, **extra})
-    return RedirectResponse(url=f"/database?{query}", status_code=303)
-
-
-def _delete_records(batch_id: int, record_ids: list[int]) -> RedirectResponse:
-    try:
-        deleted = RecordCleanupService().delete_records(record_ids, batch_id=batch_id)
-    except DeletionBlockedError as exc:
-        return _redirect_to_records(batch_id, "delete_blocked", error=str(exc))
-    return _redirect_to_records(batch_id, "delete_ok" if deleted else "delete_none", deleted=deleted)
-
-
-def _empty_batch_preview() -> BatchPreview:
-    return BatchPreview(total_selected=0, total_amount_usd=0.0, status_counts={}, records=[])

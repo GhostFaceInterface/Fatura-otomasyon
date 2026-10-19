@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Dosya yükle · e-Arşiv Taslak{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Dosya yükle</h1>
+    <p class="sub">Excel (.xlsx, .xls) veya CSV. Sonraki adımda sayfa ve kolonları seçeceksin.</p>
+  </div>
+</div>
+
+{% if error %}
+<div class="flash flash-error">{{ error }}</div>
+{% endif %}
+
+<form action="/import" method="post" enctype="multipart/form-data">
+  <div class="field">
+    <label for="file">Dosya</label>
+    <input id="file" name="file" type="file" accept=".csv,.xlsx,.xls" required>
+  </div>
+  <button type="submit" class="btn btn-primary">Devam</button>
+</form>
+{% endblock %}

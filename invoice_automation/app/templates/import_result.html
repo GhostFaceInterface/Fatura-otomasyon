@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Yükleme sonucu · e-Arşiv Taslak{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>{% if result.batch %}{{ result.batch.name }}{% else %}Yükleme sonucu{% endif %}</h1>
+    <p class="sub"><strong>{{ result.imported_count }}</strong> kişi eklendi{% if result.failed_count %}, <strong>{{ result.failed_count }}</strong> satır atlandı{% endif %}.</p>
+  </div>
+  {% if result.batch %}
+  <div class="row">
+    <form action="/periods/{{ result.batch.id }}/delete" method="post"
+      data-confirm="&quot;{{ result.batch.name }}&quot; ve bu yüklemeyle eklenen {{ result.imported_count }} kişi silinsin mi?">
+      <button type="submit" class="btn btn-danger">Geri al</button>
+    </form>
+    <a class="btn btn-primary" href="/periods/{{ result.batch.id }}">Döneme git</a>
+  </div>
+  {% endif %}
+</div>
+
+{% if result.row_errors %}
+<h2>Atlanan satırlar</h2>
+<div class="table-wrap">
+  <table>
+    <thead><tr><th class="num">Satır</th><th>Sebep</th></tr></thead>
+    <tbody>
+      {% for row_error in result.row_errors %}
+      <tr>
+        <td class="num">{{ row_error.row_number }}</td>
+        <td>{{ row_error.errors | join(", ") }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+{% endblock %}

@@ -282,3 +282,32 @@ Tamamlandi:
 - README, kullanim kilavuzu ve operasyon checklist guncellendi.
 - Tum test paketi 138 test ile basarili calisti (batch guvenilirlik PR #2 uzerine).
 
+
+## Veritabani Goruntuleme ve Silme (2026-10-19)
+
+Tamamlandi:
+
+- `/database` ekrani ve `GET /api/database`: donem ozetleri (`list_import_batch_summaries`), toplam kayit/tutar, doneme bagli olmayan kayit sayisi.
+- `RecordCleanupService` (`services/cleanup_service.py`): donem, kayit ve doneme bagli olmayan kayit silme; aktif batch job ayni donemdeyse `DeletionBlockedError`.
+- Repository: `delete_import_batch` (tek transaction, IN_PROGRESS varsa reddeder), `delete_records` (IN_PROGRESS haric), `delete_unassigned_records`, `count_unassigned_records`.
+- Kayit ekraninda satir bazli Sil ve "Secilileri sil"; import sonucunda "importu geri al".
+- Test paketi 118 test ile basarili; gecici DB ile 8011 portunda UI/API smoke testi yapildi.
+
+Notlar:
+
+- Silme geri alinamaz (hard delete); `data/imports` altindaki yuklenen dosya silinmez.
+- Portalda olusmus taslaklar silinmez; ayni kisiler tekrar yuklenirse mukerrer taslak riski operatorun sorumlulugundadir (onay mesajinda uyarilir).
+
+## Arayuz Bastan Tasarimi (2026-10-19)
+
+Tamamlandi:
+
+- Donem merkezli UI: Donemler, Donem sayfasi, Tum kayitlar, Dosya yukle, Portal.
+- Bootstrap kaldirildi; sade tek CSS; Turkce status etiketleri.
+- `docs/USAGE_GUIDE.md` yeni ekranlara gore yeniden yazildi; README teknoloji/status notlari guncellendi.
+- Test paketi 149 test ile basarili; gecici DB ile 8011'de tarayicida silme, tekrar dene, taslak var/yok, toplu silme, donem silme, tum kayitlar, yukleme+geri al ve 375px genislik dogrulandi.
+
+Notlar:
+
+- Taslak olusturma job'u ve portal aksiyonlari gercek portala karsi denenmedi; ilerleme/durdur UI'si canli pilotta gozlemlenmeli.
+- Yeni arayuzun 8010 panelinde gorunmesi icin dalin main'e merge edilip panelin yeniden baslatilmasi gerekir.

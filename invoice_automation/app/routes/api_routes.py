@@ -9,8 +9,13 @@ from invoice_automation.app.automation.session_manager import portal_session_man
 from invoice_automation.app.db.repository import InvoiceRecordRepository
 from invoice_automation.app.services.batch_job_service import batch_job_manager
 from invoice_automation.app.services.batch_service import BatchService
+from invoice_automation.app.services.cleanup_service import RecordCleanupService
 from invoice_automation.app.services.draft_service import SingleDraftService
-from invoice_automation.app.utils.exceptions import BatchJobAlreadyRunningError, PortalSessionError
+from invoice_automation.app.utils.exceptions import (
+    BatchJobAlreadyRunningError,
+    DeletionBlockedError,
+    PortalSessionError,
+)
 
 router = APIRouter(prefix="/api", tags=["api"])
 
@@ -99,6 +104,48 @@ def resolve_review_record(record_id: int, draft_exists: bool = Query(...)) -> di
     resolved = repository.resolve_needs_review(record_id, draft_exists=draft_exists)
     record = resolved or repository.get(record_id)
     return {"ok": resolved is not None, "record": record.to_dict() if record else None}
+
+
+@router.delete("/records/{record_id}", response_model=None)
+def delete_record(record_id: int) -> dict[str, object] | JSONResponse:
+    """Delete one local record (never an IN_PROGRESS one)."""
+
+    repository = InvoiceRecordRepository()
+    record = repository.get(record_id)
+    if record is None:
+        return JSONResponse(status_code=404, content={"ok": False, "error": "Kayit bulunamadi."})
+    try:
+        deleted = RecordCleanupService(repository=repository).delete_records(
+            [record_id], batch_id=record.batch_id
+        )
+    except DeletionBlockedError as exc:
+        return JSONResponse(status_code=409, content={"ok": False, "error": str(exc)})
+    return {"ok": deleted == 1, "deleted": deleted}
+
+
+@router.get("/database")
+def database_overview() -> dict[str, object]:
+    """Return every fatura period with record counts."""
+
+    repository = InvoiceRecordRepository()
+    return {
+        "total_records": repository.count(),
+        "unassigned_records": repository.count_unassigned_records(),
+        "batches": [summary.to_dict() for summary in repository.list_import_batch_summaries()],
+    }
+
+
+@router.delete("/batches/{batch_id}", response_model=None)
+def delete_batch(batch_id: int) -> dict[str, object] | JSONResponse:
+    """Delete a fatura period and all of its local records."""
+
+    try:
+        deleted = RecordCleanupService().delete_batch(batch_id)
+    except DeletionBlockedError as exc:
+        return JSONResponse(status_code=409, content={"ok": False, "error": str(exc)})
+    if deleted is None:
+        return JSONResponse(status_code=404, content={"ok": False, "error": "Donem bulunamadi."})
+    return {"ok": True, "deleted_records": deleted}
 
 
 @router.get("/session/status")

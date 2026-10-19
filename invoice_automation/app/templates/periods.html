@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Dönemler · e-Arşiv Taslak{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <h1>Dönemler</h1>
+  <a class="btn btn-primary" href="/upload">Dosya yükle</a>
+</div>
+
+{% if unassigned_count %}
+<div class="note row">
+  <span>{{ unassigned_count }} kayıt hiçbir döneme bağlı değil (eski yüklemeden kalmış).</span>
+  <span class="spacer"></span>
+  <form action="/unassigned/delete" method="post" data-confirm="Döneme bağlı olmayan {{ unassigned_count }} kayıt silinsin mi?">
+    <button type="submit" class="btn btn-sm btn-danger" {% if running_batch_id is not none %}disabled{% endif %}>Sil</button>
+  </form>
+</div>
+{% endif %}
+
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th>Dönem</th>
+        <th>Dosya</th>
+        <th class="num">Kişi</th>
+        <th class="num">Bekliyor</th>
+        <th class="num">Taslak</th>
+        <th class="num">Hata</th>
+        <th class="num">Kontrol</th>
+        <th>Yüklenme</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for summary in summaries %}
+      {% set batch = summary.batch %}
+      <tr>
+        <td><a href="/periods/{{ batch.id }}"><strong>{{ batch.name }}</strong></a></td>
+        <td class="muted">{{ batch.source_file_name }}</td>
+        <td class="num">{{ summary.record_count }}</td>
+        <td class="num">{{ summary.waiting_count }}</td>
+        <td class="num">{{ summary.success_count }}</td>
+        <td class="num">{{ summary.failed_count }}</td>
+        <td class="num">{{ summary.review_count }}</td>
+        <td class="muted">{{ batch.created_at[:10] }}</td>
+        <td class="actions">
+          <form action="/periods/{{ batch.id }}/delete" method="post"
+            data-confirm="&quot;{{ batch.name }}&quot; ve içindeki {{ summary.record_count }} kişi silinsin mi?{% if summary.success_count or summary.review_count %} Bu dönemde {{ summary.success_count }} taslak oluşmuş; portaldaki taslaklar silinmez.{% endif %}">
+            <button type="submit" class="link-btn danger" {% if running_batch_id == batch.id or summary.in_progress_count %}disabled title="Bu dönemde işlem sürüyor"{% endif %}>Sil</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="9" class="empty">Henüz dönem yok. <a href="/upload">Dosya yükle</a></td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

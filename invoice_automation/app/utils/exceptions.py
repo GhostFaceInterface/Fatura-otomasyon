@@ -45,6 +45,10 @@ class BatchJobAlreadyRunningError(InvoiceAutomationError):
     """Raised when a second batch job is started while one is active."""
 
 
+class DeletionBlockedError(InvoiceAutomationError):
+    """Raised when local data cannot be deleted because it is being processed."""
+
+
 class RecordNotEligibleError(ValueError):
     """Raised when a record is not in a status that allows draft creation."""
 

@@ -3,78 +3,56 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{{ title or "e-Arşiv Taslak Fatura" }}</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="{{ url_for('static', path='/css/app.css') }}">
+    <title>{% block title %}e-Arşiv Taslak{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='/css/app.css') }}?v={{ CSS_VERSION }}">
   </head>
   <body>
-    {% set current_path = request.url.path if request is defined else "/" %}
-    <nav class="navbar navbar-expand-lg bg-white border-bottom sticky-top app-navbar">
-      <div class="container-fluid px-4">
-        <a class="navbar-brand d-flex align-items-center gap-2" href="/">
-          <span class="brand-mark">EF</span>
-          <span>
-            <span class="brand-title">e-Arşiv Taslak Fatura</span>
-            <span class="brand-subtitle">Lokal operasyon paneli</span>
-          </span>
+    {% set path = request.url.path %}
+    {% set portal = portal_state.status %}
+    <header class="topbar">
+      <div class="topbar-inner">
+        <a class="brand" href="/">e-Arşiv Taslak</a>
+        <nav class="nav">
+          <a href="/" class="{% if path == '/' or path.startswith('/periods') %}active{% endif %}">Dönemler</a>
+          <a href="/records" class="{% if path.startswith('/records') %}active{% endif %}">Tüm kayıtlar</a>
+          <a href="/upload" class="{% if path.startswith('/upload') or path.startswith('/import') %}active{% endif %}">Dosya yükle</a>
+        </nav>
+        <a class="portal-pill" href="/portal" title="{{ portal_state.message }}">
+          <span class="dot {% if portal == 'READY' %}dot-ready{% elif portal == 'FAILED' %}dot-failed{% elif portal in ['BROWSER_OPENING', 'LOGIN_SUBMITTED', 'TWO_FACTOR_WAITING'] %}dot-waiting{% endif %}"></span>
+          Portal: {% if portal == 'READY' %}hazır{% elif portal == 'TWO_FACTOR_WAITING' %}2FA bekliyor{% elif portal == 'FAILED' %}hata{% elif portal in ['BROWSER_OPENING', 'LOGIN_SUBMITTED'] %}bağlanıyor{% else %}kapalı{% endif %}
         </a>
-        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNavigation" aria-controls="mainNavigation" aria-expanded="false" aria-label="Menüyü aç">
-          <span class="navbar-toggler-icon"></span>
-        </button>
-        <div class="collapse navbar-collapse" id="mainNavigation">
-          <ul class="navbar-nav ms-auto gap-lg-1">
-            <li class="nav-item">
-              <a class="nav-link {% if current_path == '/' or current_path.startswith('/import') %}active{% endif %}" href="/">Veri Yükle</a>
-            </li>
-            <li class="nav-item">
-              <a class="nav-link {% if current_path.startswith('/records') %}active{% endif %}" href="/records">Kayıtlar</a>
-            </li>
-            <li class="nav-item">
-              <a class="nav-link {% if current_path.startswith('/session') %}active{% endif %}" href="/session">Oturum</a>
-            </li>
-            <li class="nav-item">
-              <a class="nav-link {% if current_path.startswith('/batch') %}active{% endif %}" href="/batch">Taslak Oluştur</a>
-            </li>
-          </ul>
-        </div>
       </div>
-    </nav>
+    </header>
 
-    <main class="container-xxl py-4 py-lg-5">
-      <section class="workflow-card mb-4">
-        <div class="workflow-step {% if current_path == '/' or current_path.startswith('/import') %}active{% endif %}">
-          <span>1</span>
-          <div>
-            <strong>Veri yükle</strong>
-            <small>Excel/CSV hazırla</small>
-          </div>
-        </div>
-        <div class="workflow-step {% if current_path.startswith('/records') %}active{% endif %}">
-          <span>2</span>
-          <div>
-            <strong>Kayıt seç</strong>
-            <small>Kişileri kontrol et</small>
-          </div>
-        </div>
-        <div class="workflow-step {% if current_path.startswith('/session') %}active{% endif %}">
-          <span>3</span>
-          <div>
-            <strong>Oturum aç</strong>
-            <small>Portal hazır olsun</small>
-          </div>
-        </div>
-        <div class="workflow-step {% if current_path.startswith('/batch') %}active{% endif %}">
-          <span>4</span>
-          <div>
-            <strong>Taslak oluştur</strong>
-            <small>Seçili kayıtları işle</small>
-          </div>
-        </div>
-      </section>
-
+    <main>
+      {% if flash %}
+      <div class="flash {% if flash_error %}flash-error{% endif %}" role="status">{{ flash }}</div>
+      {% endif %}
       {% block content %}{% endblock %}
     </main>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+      // A form or submit button with data-confirm asks first. The button's
+      // message wins, so one form can carry several confirmed actions.
+      document.addEventListener("submit", (event) => {
+        const form = event.target;
+        const message = event.submitter?.dataset.confirm || form.dataset.confirm;
+        if (message && !window.confirm(message)) {
+          event.preventDefault();
+          return;
+        }
+        // Disable after the browser has read the submitter's name/value.
+        window.setTimeout(() => {
+          document.querySelectorAll("button[type=submit]").forEach((button) => { button.disabled = true; });
+        }, 0);
+      });
+      // Back/forward cache would otherwise restore the disabled buttons.
+      window.addEventListener("pageshow", (event) => {
+        if (event.persisted) {
+          window.location.reload();
+        }
+      });
+    </script>
+    {% block scripts %}{% endblock %}
   </body>
 </html>

@@ -1,0 +1,31 @@
+{# Shared pieces for record tables. Row action buttons submit the hidden
+   #row-action form (via form=) so they also work inside another form. #}
+
+{% macro status_cell(record) %}
+<span class="badge tone-{{ record.islem_durumu|status_tone }}" title="{{ record.islem_durumu }}">{{ record.islem_durumu|status_label }}</span>
+{% if record.hata_mesaji and record.islem_durumu != "SUCCESS_DRAFT_CREATED" %}
+<span class="error-text">{{ record.hata_mesaji }}</span>
+{% endif %}
+{% endmacro %}
+
+{% macro row_actions(record) %}
+{% set name = record.ad ~ " " ~ record.soyad %}
+{% if record.islem_durumu in RETRYABLE_STATUS_VALUES %}
+<button type="submit" form="row-action" class="link-btn" formaction="/records/{{ record.id }}/retry">Tekrar dene</button>
+{% elif record.islem_durumu == "NEEDS_REVIEW" %}
+<button type="submit" form="row-action" class="link-btn" formaction="/records/{{ record.id }}/review" name="draft_exists" value="1"
+  data-confirm="Portalda {{ name }} için taslak VAR mı? Kayıt 'Taslak oluştu' olarak işaretlenecek.">Taslak var</button>
+<button type="submit" form="row-action" class="link-btn" formaction="/records/{{ record.id }}/review" name="draft_exists" value="0"
+  data-confirm="Portalda {{ name }} için taslak YOK mu? Kayıt tekrar 'Bekliyor' olacak.">Taslak yok</button>
+{% endif %}
+{% if record.islem_durumu != "IN_PROGRESS" %}
+<button type="submit" form="row-action" class="link-btn danger" formaction="/records/{{ record.id }}/delete"
+  data-confirm="{{ name }} silinsin mi?{% if record.islem_durumu in ['SUCCESS_DRAFT_CREATED', 'NEEDS_REVIEW'] %} Portaldaki taslak silinmez, sadece buradaki kayıt silinir.{% endif %}">Sil</button>
+{% endif %}
+{% endmacro %}
+
+{% macro row_action_form(next_url) %}
+<form id="row-action" method="post" hidden>
+  <input type="hidden" name="next" value="{{ next_url }}">
+</form>
+{% endmacro %}

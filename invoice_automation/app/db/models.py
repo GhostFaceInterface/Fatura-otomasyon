@@ -147,6 +147,34 @@ class ImportBatch:
         }
 
 
+@dataclass(frozen=True)
+class ImportBatchSummary:
+    """An import/fatura period with aggregated record counts."""
+
+    batch: ImportBatch
+    record_count: int
+    total_usd: float
+    waiting_count: int
+    success_count: int
+    failed_count: int
+    review_count: int
+    in_progress_count: int
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return a JSON-serializable dictionary."""
+
+        return {
+            "batch": self.batch.to_dict(),
+            "record_count": self.record_count,
+            "total_usd": self.total_usd,
+            "waiting_count": self.waiting_count,
+            "success_count": self.success_count,
+            "failed_count": self.failed_count,
+            "review_count": self.review_count,
+            "in_progress_count": self.in_progress_count,
+        }
+
+
 def utc_timestamp() -> str:
     """Return an ISO timestamp in UTC."""
 

@@ -54,6 +54,12 @@
 <div class="alert alert-success">Kontrol bekleyen kayıt sonuçlandırıldı.</div>
 {% elif record_action_message == "review_rejected" %}
 <div class="alert alert-warning">Kayıt artık kontrol bekleyen durumda değil.</div>
+{% elif record_action_message == "delete_ok" %}
+<div class="alert alert-success"><strong>{{ deleted_count }}</strong> kayıt veritabanından silindi.</div>
+{% elif record_action_message == "delete_none" %}
+<div class="alert alert-warning">Silinecek kayıt bulunamadı. İşlenmekte olan (IN_PROGRESS) kayıtlar silinmez.</div>
+{% elif record_action_message == "delete_blocked" %}
+<div class="alert alert-danger">{{ record_action_error or "Kayıtlar şu anda silinemez." }}</div>
 {% endif %}
 
 {% if selection_saved %}
@@ -134,7 +140,10 @@
           <h2 class="h5 mb-1">Kayıt listesi</h2>
           <p class="small-muted mb-0">Yalnızca PENDING ve SELECTED kayıtlar seçilebilir.</p>
         </div>
-        <button type="submit" class="btn btn-primary" {% if not active_batch %}disabled{% endif %}>Seçimi kaydet</button>
+        <div class="d-flex flex-wrap gap-2">
+          <button id="delete-selected-records" type="submit" class="btn btn-outline-danger" formaction="/records/delete" data-confirm="Seçili kayıtlar silinsin mi?" {% if not active_batch or not selected_count %}disabled{% endif %}>Seçilileri sil</button>
+          <button type="submit" class="btn btn-primary" {% if not active_batch %}disabled{% endif %}>Seçimi kaydet</button>
+        </div>
       </div>
     </div>
 
@@ -153,6 +162,7 @@
             <th>TC kimlik no</th>
             <th>Tutar</th>
             <th>Durum</th>
+            <th class="text-end">İşlem</th>
           </tr>
         </thead>
         <tbody id="records-table-body">
@@ -174,10 +184,17 @@
                 {{ record.islem_durumu }}
               </span>
             </td>
+            <td class="text-end">
+              {% if record.islem_durumu != "IN_PROGRESS" %}
+              <button type="submit" form="record-delete-form" formaction="/records/{{ record.id }}/delete" class="btn btn-sm btn-outline-danger" data-confirm="{{ record.ad }} {{ record.soyad }} kaydı silinsin mi?{% if record.islem_durumu in ['SUCCESS_DRAFT_CREATED', 'NEEDS_REVIEW'] %} Portalda oluşmuş taslak silinmez; sadece yerel kayıt silinir.{% endif %}">Sil</button>
+              {% else %}
+              <span class="small-muted">İşleniyor</span>
+              {% endif %}
+            </td>
           </tr>
           {% else %}
           <tr>
-            <td colspan="6">
+            <td colspan="7">
               <div class="empty-state">Bu filtrelerle kayıt bulunamadı.</div>
             </td>
           </tr>
@@ -187,6 +204,12 @@
     </div>
   </div>
 </form>
+
+{% if active_batch %}
+<form id="record-delete-form" method="post" hidden>
+  <input type="hidden" name="batch_id" value="{{ active_batch.id }}">
+</form>
+{% endif %}
 
 {% if active_batch and (review_records or retryable_records) %}
 <div class="app-card mt-4">
@@ -259,17 +282,6 @@
     </table>
   </div>
 </div>
-<script>
-  document.querySelectorAll("form[data-confirm]").forEach((form) => {
-    form.addEventListener("submit", (event) => {
-      if (!window.confirm(form.dataset.confirm)) {
-        event.preventDefault();
-        return;
-      }
-      form.querySelectorAll("button[type=submit]").forEach((button) => { button.disabled = true; });
-    });
-  });
-</script>
 {% endif %}
 
 <div id="selected-record-state" data-selected-record-ids="{{ selected_record_ids|join(',') }}" hidden></div>
@@ -315,6 +327,18 @@
       return "status-neutral";
     };
 
+    const draftMayExistStatuses = new Set(["SUCCESS_DRAFT_CREATED", "NEEDS_REVIEW"]);
+    const deleteButton = (record) => {
+      if (record.islem_durumu === "IN_PROGRESS") {
+        return `<span class="small-muted">İşleniyor</span>`;
+      }
+      let message = `${record.ad} ${record.soyad} kaydı silinsin mi?`;
+      if (draftMayExistStatuses.has(record.islem_durumu)) {
+        message += " Portalda oluşmuş taslak silinmez; sadece yerel kayıt silinir.";
+      }
+      return `<button type="submit" form="record-delete-form" formaction="/records/${encodeURIComponent(record.id)}/delete" class="btn btn-sm btn-outline-danger" data-confirm="${escapeHtml(message)}">Sil</button>`;
+    };
+
     const renderRecordRow = (record) => {
       const recordId = String(record.id);
       const isSelectable = selectableStatuses.has(record.islem_durumu);
@@ -335,6 +359,7 @@
               ${escapeHtml(record.islem_durumu)}
             </span>
           </td>
+          <td class="text-end">${deleteButton(record)}</td>
         </tr>
       `;
     };
@@ -353,9 +378,15 @@
       });
     };
 
+    const deleteSelectedButton = document.getElementById("delete-selected-records");
+
     const updateSelectionCount = () => {
       if (selectedRecordCount) {
         selectedRecordCount.textContent = String(selectedRecordIds.size);
+      }
+      if (deleteSelectedButton && selectionForm?.querySelector('input[name="batch_id"]')) {
+        deleteSelectedButton.disabled = selectedRecordIds.size === 0;
+        deleteSelectedButton.dataset.confirm = `${selectedRecordIds.size} seçili kayıt veritabanından silinsin mi? Bu işlem geri alınamaz.`;
       }
     };
 
@@ -389,7 +420,7 @@
       if (records.length === 0) {
         tableBody.innerHTML = `
           <tr>
-            <td colspan="6">
+            <td colspan="7">
               <div class="empty-state">Bu filtrelerle kayıt bulunamadı.</div>
             </td>
           </tr>

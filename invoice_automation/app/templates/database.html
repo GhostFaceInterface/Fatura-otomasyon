@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <div class="page-kicker">Veri yönetimi</div>
+    <h1 class="page-title">Veritabanı</h1>
+    <p class="page-description">Sistemde kayıtlı tüm fatura dönemlerini ve kayıt durumlarını gör. Yanlış yüklenen dönemleri veya kayıtları buradan sil.</p>
+  </div>
+  <div class="action-bar">
+    <a class="btn btn-outline-secondary" href="/">Yeni dosya yükle</a>
+  </div>
+</div>
+
+{% if db_action == "batch_deleted" %}
+<div class="alert alert-success">Fatura dönemi silindi. Silinen kayıt sayısı: <strong>{{ deleted_count }}</strong>.</div>
+{% elif db_action == "unassigned_deleted" %}
+<div class="alert alert-success">Döneme bağlı olmayan <strong>{{ deleted_count }}</strong> kayıt silindi.</div>
+{% elif db_action == "batch_missing" %}
+<div class="alert alert-warning">Fatura dönemi bulunamadı; daha önce silinmiş olabilir.</div>
+{% elif db_action == "blocked" %}
+<div class="alert alert-danger">{{ error or "Silme işlemi şu anda yapılamaz." }}</div>
+{% endif %}
+
+<div class="row g-3 mb-4">
+  <div class="col-sm-6 col-lg-3">
+    <div class="metric-card">
+      <span>Fatura dönemi</span>
+      <strong>{{ summaries|length }}</strong>
+    </div>
+  </div>
+  <div class="col-sm-6 col-lg-3">
+    <div class="metric-card">
+      <span>Toplam kayıt</span>
+      <strong>{{ total_records }}</strong>
+    </div>
+  </div>
+  <div class="col-sm-6 col-lg-3">
+    <div class="metric-card">
+      <span>Toplam tutar</span>
+      <strong>{{ "%.2f"|format(total_usd) }} USD</strong>
+    </div>
+  </div>
+  <div class="col-sm-6 col-lg-3">
+    <div class="metric-card">
+      <span>Veritabanı dosyası</span>
+      <div class="small text-break mt-1">{{ database_path }}</div>
+    </div>
+  </div>
+</div>
+
+<div class="app-card">
+  <div class="app-card-header">
+    <div>
+      <h2 class="h5 mb-1">Fatura dönemleri</h2>
+      <p class="small-muted mb-0">
+        Dönem silinince içindeki tüm kayıtlar da yerel veritabanından silinir. Portalda oluşturulmuş taslaklar etkilenmez.
+      </p>
+    </div>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead>
+        <tr>
+          <th>Dönem</th>
+          <th>Dosya / Sheet</th>
+          <th>Oluşturma</th>
+          <th class="text-end">Kayıt</th>
+          <th class="text-end">Tutar</th>
+          <th class="text-end">Bekleyen</th>
+          <th class="text-end">Başarılı</th>
+          <th class="text-end">Hatalı / Atlanan</th>
+          <th class="text-end">Kontrol</th>
+          <th class="text-end">Aksiyon</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for summary in summaries %}
+        {% set batch = summary.batch %}
+        {% set is_busy = running_batch_id == batch.id or summary.in_progress_count > 0 %}
+        <tr>
+          <td class="fw-semibold">{{ batch.name }}</td>
+          <td class="small">{{ batch.source_file_name }}<br><span class="small-muted">{{ batch.sheet_name or "-" }}</span></td>
+          <td class="small">{{ batch.created_at }}</td>
+          <td class="text-end">{{ summary.record_count }}</td>
+          <td class="text-end">{{ "%.2f"|format(summary.total_usd) }}</td>
+          <td class="text-end">{{ summary.waiting_count }}</td>
+          <td class="text-end">{% if summary.success_count %}<span class="status-badge status-success">{{ summary.success_count }}</span>{% else %}0{% endif %}</td>
+          <td class="text-end">{% if summary.failed_count %}<span class="status-badge status-failed">{{ summary.failed_count }}</span>{% else %}0{% endif %}</td>
+          <td class="text-end">{% if summary.review_count %}<span class="status-badge status-warning">{{ summary.review_count }}</span>{% else %}0{% endif %}</td>
+          <td class="text-end">
+            <div class="d-inline-flex gap-2">
+              <a class="btn btn-sm btn-outline-primary" href="/records?batch_id={{ batch.id }}">Aç</a>
+              <form action="/batches/{{ batch.id }}/delete" method="post" data-confirm="&quot;{{ batch.name }}&quot; dönemi ve {{ summary.record_count }} kaydı silinsin mi? Bu işlem geri alınamaz.{% if summary.success_count or summary.review_count %} Dikkat: bu dönemde {{ summary.success_count }} başarılı ve {{ summary.review_count }} kontrol bekleyen kayıt var; portaldaki taslaklar silinmez, aynı kişileri tekrar yüklersen mükerrer taslak oluşabilir.{% endif %}">
+                <button type="submit" class="btn btn-sm btn-outline-danger" {% if is_busy %}disabled title="Bu dönemde işlem sürüyor"{% endif %}>Sil</button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="10">
+            <div class="empty-state">Veritabanında fatura dönemi yok.</div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% if unassigned_count %}
+<div class="app-card mt-4">
+  <div class="app-card-header">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
+      <div>
+        <h2 class="h5 mb-1">Döneme bağlı olmayan kayıtlar</h2>
+        <p class="small-muted mb-0">
+          {{ unassigned_count }} kayıt hiçbir fatura dönemine bağlı değil (eski sürümden kalan import). Bu kayıtlar ekranlarda görünmez.
+        </p>
+      </div>
+      <form action="/database/unassigned/delete" method="post" data-confirm="Döneme bağlı olmayan {{ unassigned_count }} kayıt silinsin mi? Bu işlem geri alınamaz.">
+        <button type="submit" class="btn btn-outline-danger" {% if running_batch_id is not none %}disabled{% endif %}>Bu kayıtları sil</button>
+      </form>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

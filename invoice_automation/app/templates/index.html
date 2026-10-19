@@ -29,7 +29,12 @@
       <div><strong>{{ result.imported_count }}</strong> kayıt eklendi, <strong>{{ result.failed_count }}</strong> satır atlandı.</div>
     </div>
     {% if result.batch %}
-    <a class="btn btn-success" href="/records?batch_id={{ result.batch.id }}">Kayıtları kontrol et</a>
+    <div class="d-flex flex-wrap gap-2">
+      <form action="/batches/{{ result.batch.id }}/delete" method="post" data-confirm="&quot;{{ result.batch.name }}&quot; dönemi ve bu importla eklenen {{ result.imported_count }} kayıt silinsin mi? Bu işlem geri alınamaz.">
+        <button type="submit" class="btn btn-outline-danger">Yanlış dosya: importu geri al</button>
+      </form>
+      <a class="btn btn-success" href="/records?batch_id={{ result.batch.id }}">Kayıtları kontrol et</a>
+    </div>
     {% else %}
     <a class="btn btn-success" href="/records">Kayıtları kontrol et</a>
     {% endif %}
@@ -127,9 +132,12 @@
 
 <div class="app-card mt-4">
   <div class="app-card-header">
-    <div>
-      <h2 class="h5 mb-1">Mevcut fatura dönemleri</h2>
-      <p class="text-muted mb-0">Eski ve yeni importlar birbirine karışmaz. İşlem yapacağın dönemi buradan aç.</p>
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
+      <div>
+        <h2 class="h5 mb-1">Mevcut fatura dönemleri</h2>
+        <p class="text-muted mb-0">Eski ve yeni importlar birbirine karışmaz. İşlem yapacağın dönemi buradan aç.</p>
+      </div>
+      <a class="btn btn-outline-secondary btn-sm" href="/database">Dönemleri yönet / sil</a>
     </div>
   </div>
   <div class="table-responsive">

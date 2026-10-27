@@ -8,6 +8,7 @@ POST actions redirect back with a one-line flash message.
 from __future__ import annotations
 
 from datetime import UTC, datetime
+import json
 import logging
 from pathlib import Path
 import shutil
@@ -15,8 +16,9 @@ from typing import Any
 from urllib.parse import parse_qsl, urlencode
 
 from fastapi import APIRouter, File, Form, Query, Request, UploadFile
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
+from pydantic import BaseModel
 
 from invoice_automation.app.automation.session_manager import portal_session_manager
 from invoice_automation.app.config import ROOT_DIR, ensure_runtime_directories, settings
@@ -31,7 +33,13 @@ from invoice_automation.app.db.models import InvoiceRecord
 from invoice_automation.app.db.repository import InvoiceRecordRepository
 from invoice_automation.app.services.batch_job_service import batch_job_manager
 from invoice_automation.app.services.cleanup_service import RecordCleanupService
-from invoice_automation.app.services.import_service import ImportService, normalize_column_name
+from invoice_automation.app.schemas.invoice_record import PREVIEW_FIELDS, PreviewRow
+from invoice_automation.app.services.import_service import (
+    ImportService,
+    check_preview_rows,
+    normalize_column_name,
+    summarize_preview,
+)
 from invoice_automation.app.services.selection_service import SelectionService
 from invoice_automation.app.utils.exceptions import (
     BatchJobAlreadyRunningError,
@@ -309,52 +317,152 @@ def inspect_import_sheet(
     request: Request,
     saved_path: str = Form(...),
     sheet_name: str = Form(...),
+    map_ad: str = Form(default=""),
+    map_soyad: str = Form(default=""),
+    map_tc_kimlik_no: str = Form(default=""),
+    map_tutar_usd: str = Form(default=""),
+    map_aciklama: str = Form(default=""),
 ) -> HTMLResponse:
-    """Reload the mapping form for another sheet."""
+    """Reload the mapping form for another sheet, or come back from the preview."""
 
+    chosen = {
+        "ad": map_ad,
+        "soyad": map_soyad,
+        "tc_kimlik_no": map_tc_kimlik_no,
+        "tutar_usd": map_tutar_usd,
+        "aciklama": map_aciklama,
+    }
     try:
         file_path = _resolve_import_path(saved_path)
         inspection = ImportService().inspect_file(file_path, sheet_name=sheet_name)
-        return _render_import_mapping(request, file_path, inspection)
+        return _render_import_mapping(request, file_path, inspection, chosen)
     except ImportValidationError as exc:
         return _render(request, "upload.html", error=str(exc))
 
 
-@router.post("/import/confirm", response_class=HTMLResponse)
-def confirm_import(
+@router.post("/import/preview", response_class=HTMLResponse)
+def preview_import(
     request: Request,
     saved_path: str = Form(...),
     sheet_name: str = Form(...),
-    batch_name: str = Form(...),
     map_ad: str = Form(...),
     map_soyad: str = Form(...),
     map_tc_kimlik_no: str = Form(...),
     map_tutar_usd: str = Form(...),
     map_aciklama: str = Form(default=""),
 ) -> HTMLResponse:
-    """Import the sheet with the chosen columns into a new period."""
+    """Show the people of the sheet in an editable table. Nothing is saved yet."""
 
+    mapping = {
+        "ad": map_ad,
+        "soyad": map_soyad,
+        "tc_kimlik_no": map_tc_kimlik_no,
+        "tutar_usd": map_tutar_usd,
+        "aciklama": map_aciklama,
+    }
     try:
         file_path = _resolve_import_path(saved_path)
-        result = ImportService().import_file(
-            file_path,
-            batch_name=batch_name,
-            sheet_name=sheet_name,
-            column_mapping={
-                "ad": map_ad,
-                "soyad": map_soyad,
-                "tc_kimlik_no": map_tc_kimlik_no,
-                "tutar_usd": map_tutar_usd,
-                "aciklama": map_aciklama,
-            },
-        )
+        rows = ImportService().read_preview_rows(file_path, sheet_name=sheet_name, column_mapping=mapping)
     except ImportValidationError as exc:
-        logger.info("Mapped import rejected | file=%s error=%s", saved_path, exc)
+        logger.info("Import preview rejected | file=%s error=%s", saved_path, exc)
         return _render(request, "upload.html", error=str(exc))
     except Exception:
-        logger.exception("Unexpected mapped import error | file=%s", saved_path)
-        return _render(request, "upload.html", error="Dosya içe aktarılamadı. Ayrıntı log dosyasında.")
-    return _render(request, "import_result.html", result=result)
+        logger.exception("Unexpected import preview error | file=%s", saved_path)
+        return _render(request, "upload.html", error="Dosya okunamadı. Ayrıntı log dosyasında.")
+    return _render_import_preview(
+        request,
+        saved_path=file_path,
+        sheet_name=sheet_name,
+        mapping=mapping,
+        batch_name="",
+        rows=rows,
+    )
+
+
+class PreviewRowIn(BaseModel):
+    """A preview row as the browser sends it."""
+
+    values: dict[str, str] = {}
+    source_row: int | None = None
+    original: dict[str, str] | None = None
+    removed: bool = False
+
+    def to_row(self) -> PreviewRow:
+        return PreviewRow(
+            values={name: self.values.get(name, "") for name in PREVIEW_FIELDS},
+            source_row=self.source_row,
+            original={name: self.original.get(name, "") for name in PREVIEW_FIELDS}
+            if self.original is not None
+            else None,
+            removed=self.removed,
+        )
+
+
+@router.post("/import/check")
+def check_import_rows(rows: list[PreviewRowIn]) -> JSONResponse:
+    """Check the preview table as it is being edited (same rules as the import)."""
+
+    checked = check_preview_rows([row.to_row() for row in rows])
+    return JSONResponse(
+        {"rows": [row.to_dict() for row in checked], "summary": summarize_preview(checked)}
+    )
+
+
+@router.post("/import/confirm", response_class=HTMLResponse, response_model=None)
+def confirm_import(
+    request: Request,
+    saved_path: str = Form(...),
+    sheet_name: str = Form(...),
+    batch_name: str = Form(default=""),
+    rows_json: str = Form(...),
+    map_ad: str = Form(default=""),
+    map_soyad: str = Form(default=""),
+    map_tc_kimlik_no: str = Form(default=""),
+    map_tutar_usd: str = Form(default=""),
+    map_aciklama: str = Form(default=""),
+) -> HTMLResponse | RedirectResponse:
+    """Create the period from the preview table exactly as the user left it."""
+
+    mapping = {
+        "ad": map_ad,
+        "soyad": map_soyad,
+        "tc_kimlik_no": map_tc_kimlik_no,
+        "tutar_usd": map_tutar_usd,
+        "aciklama": map_aciklama,
+    }
+    try:
+        file_path = _resolve_import_path(saved_path)
+        rows = [PreviewRowIn.model_validate(item).to_row() for item in json.loads(rows_json)]
+    except (ImportValidationError, ValueError, TypeError) as exc:
+        logger.warning("Import confirm rejected: bad form data | file=%s error=%s", saved_path, exc)
+        return _render(request, "upload.html", error="Önizleme verisi okunamadı. Dosyayı tekrar yükle.")
+
+    try:
+        result = ImportService().import_preview_rows(
+            rows,
+            batch_name=batch_name,
+            source_file_name=file_path.name,
+            sheet_name=sheet_name,
+        )
+    except ImportValidationError as exc:
+        error = str(exc)
+    except Exception:
+        logger.exception("Unexpected import confirm error | file=%s", saved_path)
+        error = "İçe aktarılamadı, hiçbir kayıt yazılmadı. Ayrıntı log dosyasında."
+    else:
+        assert result.batch is not None
+        return _redirect(f"/periods/{result.batch.id}", f"{result.imported_count} kişi içe aktarıldı.")
+
+    # Nothing was written; show the same table again with the problem on top.
+    return _render_import_preview(
+        request,
+        saved_path=file_path,
+        sheet_name=sheet_name,
+        mapping=mapping,
+        batch_name=batch_name,
+        rows=check_preview_rows(rows),
+        error=error,
+    )
 
 
 # --- Portal oturumu ---------------------------------------------------------------
@@ -455,15 +563,52 @@ def _save_upload(file: UploadFile) -> Path:
     return saved_path
 
 
-def _render_import_mapping(request: Request, saved_path: Path, inspection) -> HTMLResponse:
+def _render_import_mapping(
+    request: Request,
+    saved_path: Path,
+    inspection,
+    chosen: dict[str, str] | None = None,
+) -> HTMLResponse:
     """Render the mapping form for an uploaded import file."""
 
+    if chosen and any(chosen.values()):
+        # Coming back from the preview keeps the columns picked before.
+        mapping = {field: column for field, column in chosen.items() if column in inspection.columns}
+    else:
+        mapping = _default_mapping(inspection.columns)
     return _render(
         request,
         "import_mapping.html",
         saved_path=str(saved_path),
         inspection=inspection,
-        default_mapping=_default_mapping(inspection.columns),
+        default_mapping=mapping,
+    )
+
+
+def _render_import_preview(
+    request: Request,
+    *,
+    saved_path: Path,
+    sheet_name: str,
+    mapping: dict[str, str],
+    batch_name: str,
+    rows: list[PreviewRow],
+    error: str | None = None,
+) -> HTMLResponse:
+    """Render the editable preview table."""
+
+    return _render(
+        request,
+        "import_preview.html",
+        saved_path=str(saved_path),
+        display_name=saved_path.name.split("_", 1)[-1],
+        sheet_name=sheet_name,
+        mapping=mapping,
+        batch_name=batch_name,
+        show_aciklama=bool(mapping.get("aciklama")),
+        rows=[row.to_dict() for row in rows],
+        summary=summarize_preview(rows),
+        error=error,
     )
 
 

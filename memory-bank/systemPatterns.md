@@ -26,6 +26,7 @@
 - Basari DB yazimi portal try blogunun disindadir; boylece basarili taslak hicbir zaman FAILED isaretlenmez.
 - Uygulama acilisinda (FastAPI lifespan) IN_PROGRESS kalmis kayitlar NEEDS_REVIEW'e cekilir; job beklenmedik hatayla biterse ayni kurtarma hemen calisir.
 - Import once tum satirlari dogrular, sonra batch ve kayitlari `create_import` ile tek SQLite transaction'inda yazar.
+- UI importu onizlemeden gecer: tablo durumu tarayicida, dogrulama kurallari sadece `check_preview_rows` icinde (canli `/import/check` ve son `import_preview_rows` ayni fonksiyonu kullanir). Tabloda ne gorunuyorsa o aktarilir; tek hata varsa hicbir sey yazilmaz.
 - Additive migration'a bagli index'ler (`idx_invoice_records_batch_id`) SCHEMA_SQL'de degil, migration sonrasinda olusturulur.
 - `BatchRunner.run()` sadece batch isleme sirasinda `SleepPreventionGuard` context manager'i acarak bilgisayarin uyumasini engeller ve cikista otomatik kapatir.
 - Sleep prevention macOS icin `caffeinate`, Windows icin `SetThreadExecutionState`, Linux icin `systemd-inhibit` kullanir.

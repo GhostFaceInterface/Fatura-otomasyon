@@ -311,3 +311,17 @@ Notlar:
 
 - Taslak olusturma job'u ve portal aksiyonlari gercek portala karsi denenmedi; ilerleme/durdur UI'si canli pilotta gozlemlenmeli.
 - Yeni arayuzun 8010 panelinde gorunmesi icin dalin main'e merge edilip panelin yeniden baslatilmasi gerekir.
+
+## Ice Aktarim Onizlemesi (2026-10-27)
+
+Tamamlandi:
+
+- Kolon seciminden sonra duzenlenebilir onizleme: satir sil/geri al, kisi ekle, tum alanlari ve tutari duzelt, hatalilari toplu sil, arama ve gorunum filtresi, alt cubukta kisi sayisi ve toplam USD.
+- `POST /import/preview`, `POST /import/check` (canli kontrol), `POST /import/confirm` (tek transaction + PRG).
+- `tests/test_import_preview.py`; tum paket 172 test ile basarili.
+- Gecici DB ile 8011'de tarayicida uctan uca denendi: duzeltilen TCKN, degisen tutar, silinen ve eklenen kisi SQLite'a birebir yazildi (eklenen kisinin `kaynak_satir_no` NULL, hepsi PENDING). Hatali veri ve bos donem adi sunucuda reddedildi, hicbir satir yazilmadi; 2000 satirlik tablo sorunsuz aktarildi.
+
+Notlar:
+
+- Onizleme durumu sadece sayfada tutulur; sayfadan ayrilirsa (uyari sorulur) degisiklikler kaybolur, dosya `data/imports` altinda kalir.
+- Mobilde tablo kendi kutusunda yatay kayar; ana kullanim masaustu.

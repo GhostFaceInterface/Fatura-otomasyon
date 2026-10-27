@@ -149,3 +149,13 @@ Arayuz baştan tasarimi (2026-10-19, branch `feat/ui-redesign`, `origin/main` uz
 - Bootstrap kaldirildi; tek `static/css/app.css`. CSS URL'i dosya mtime'i ile versiyonlanir (`CSS_VERSION`), yoksa tarayici eski CSS'i cache'den veriyordu.
 - Status etiketleri `constants.STATUS_LABELS` (Turkce etiket + rozet tonu), Jinja `status_label`/`status_tone`/`status_group` filtreleri.
 - Satir aksiyon butonlari gizli `#row-action` formuna `form=` + `formaction` ile baglanir (ic ice form olmadan). Ortak submit handler butonlari `setTimeout` ile pasif yapar ki submitter'in name/value'su gonderilsin.
+
+Ice aktarim onizlemesi (2026-10-27, branch `feat/ui-redesign`):
+
+- Kullanici istegi: Excel importundan sonra, onaylamadan once kisileri silebilmek, ekleyebilmek ve kesilecek fatura tutarini degistirebilmek; sade ve gercekten DB'ye dogru yazan bir akis.
+- Yeni akis: `/upload` -> `/import` (kolon secimi) -> `POST /import/preview` (duzenlenebilir tablo, DB'ye yazmaz) -> `POST /import/confirm` (tek transaction, sonra `/periods/{id}?msg=` PRG). `import_result.html` kaldirildi; geri alma = donem sayfasindaki `Donemi sil`.
+- Kural tek yerde: `import_service.check_preview_rows` / `check_row_values` / `parse_amount`. Canli kontrol (`POST /import/check`, JSON), son import (`import_preview_rows`) ve eski `import_file` ayni fonksiyonlardan gecer; tarayicida ikinci bir dogrulama kurali yok.
+- Tablo durumu JS'te tutulur ve gonderimde `rows_json` gizli alaniyla tek JSON olarak post edilir (Starlette 1000 form alani limitine takilmamak icin). Satir: values, source_row (yeni kisi icin null), original (dosyadaki temiz deger; degisen hucreyi sari isaretlemek icin), removed.
+- Tutar hucreden cikinca kanonik `1450.00` bicimine yazilir; bu bicim tekrar parse edildiginde degismez (ondalik nokta + 2 hane, binlik sanilmaz). 2'den fazla ondalik hata (Excel float gurultusu <1e-6 yuvarlanir).
+- Hata varken buton kapali; sunucu yine de tum satirlari tekrar kontrol eder, tek hata varsa hicbir sey yazmaz ve ayni tabloyu hata mesajiyla geri cizer. Silinen ve bos yeni satirlar import edilmez ve hata uretmez. Ayni TCKN uyari (engellemez).
+- Tarayici panelinde (Claude Browser) otomasyon adimlari arasinda sayfa zamanlayicilari bazen donuyor; canli kontrol gecikmis gorunebilir. Gercek tarayicida ve JS ile beklenince dogru calisti.

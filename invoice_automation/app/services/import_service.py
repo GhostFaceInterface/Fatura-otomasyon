@@ -22,6 +22,7 @@ from invoice_automation.app.schemas.invoice_record import (
     PreviewRow,
     RowValidationError,
 )
+from invoice_automation.app.services.excel_table import read_excel_table
 from invoice_automation.app.services.validation_service import validate_required_columns
 from invoice_automation.app.utils.exceptions import ImportValidationError, UnsupportedFileTypeError
 
@@ -118,13 +119,7 @@ class ImportService:
             if file_path.suffix.lower() == ".csv":
                 dataframe = pd.read_csv(file_path, dtype=str, keep_default_na=False, nrows=0)
             else:
-                dataframe = pd.read_excel(
-                    file_path,
-                    sheet_name=sheet_name,
-                    dtype=str,
-                    keep_default_na=False,
-                    nrows=0,
-                )
+                dataframe = read_excel_table(file_path, sheet_name, normalize_column_name)
         except Exception as exc:
             raise ImportValidationError(f"Kolonlar okunamadi: {exc}") from exc
         return [str(column) for column in dataframe.columns]
@@ -292,7 +287,7 @@ class ImportService:
         extension = file_path.suffix.lower()
         if extension == ".csv":
             return pd.read_csv(file_path, dtype=str, keep_default_na=False)
-        return pd.read_excel(file_path, sheet_name=sheet_name, dtype=str, keep_default_na=False)
+        return read_excel_table(file_path, sheet_name, normalize_column_name)
 
     def _apply_mapping_or_normalize(
         self,

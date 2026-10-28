@@ -185,3 +185,66 @@ def test_import_service_rolls_back_whole_import_on_persist_failure(tmp_path: Pat
 
     assert repository.count() == 0
     assert repository.list_import_batches() == []
+
+
+def _write_titled_payment_sheet(excel_path: Path) -> None:
+    """Write a sheet shaped like the real payment lists: title rows, header on row 4."""
+
+    from openpyxl import Workbook
+
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Odemeler"
+    sheet["A1"] = "6 EKIM 2026 ODEMELER"
+    sheet.merge_cells("A1:F1")
+    sheet["A2"] = "GIDIS TARIHI :"
+    sheet["D2"] = "23.03.2026"
+    sheet["G2"] = "ACIKLAMA"
+    sheet.merge_cells("G2:G4")
+    sheet["A3"] = "DONUS TARIHI :"
+    sheet["D3"] = "11.04.2026"
+    for column, name in enumerate(["NO", "ADI", "SOYADI", "TC", "UCRET", "ODENEN"], start=1):
+        sheet.cell(4, column, name)
+    sheet.cell(5, 1, 1)
+    sheet.cell(5, 2, "Ali")
+    sheet.cell(5, 3, "Yilmaz")
+    sheet.cell(5, 4, 12345678901)
+    sheet.cell(5, 5, 2100)
+    sheet.cell(5, 6, 2100)
+    sheet.cell(5, 7, "Not")
+    sheet.cell(7, 5, 2100)  # totals row under an empty line
+    workbook.save(excel_path)
+
+
+def test_inspect_file_finds_header_below_title_rows(tmp_path: Path) -> None:
+    excel_path = tmp_path / "odemeler.xlsx"
+    _write_titled_payment_sheet(excel_path)
+
+    inspection = ImportService(InvoiceRecordRepository(tmp_path / "test.sqlite3")).inspect_file(excel_path)
+
+    assert inspection.columns == ["NO", "ADI", "SOYADI", "TC", "UCRET", "ODENEN", "ACIKLAMA"]
+
+
+def test_import_file_reads_rows_below_title_rows(tmp_path: Path) -> None:
+    excel_path = tmp_path / "odemeler.xlsx"
+    _write_titled_payment_sheet(excel_path)
+    repository = InvoiceRecordRepository(tmp_path / "test.sqlite3")
+
+    result = ImportService(repository).import_file(
+        excel_path,
+        sheet_name="Odemeler",
+        column_mapping={
+            "ad": "ADI",
+            "soyad": "SOYADI",
+            "tc_kimlik_no": "TC",
+            "tutar_usd": "UCRET",
+            "aciklama": "ACIKLAMA",
+        },
+    )
+
+    records = repository.list_all(batch_id=result.batch.id)
+    assert [(record.ad, record.tc_kimlik_no, record.kaynak_satir_no) for record in records] == [
+        ("Ali", "12345678901", 5)
+    ]
+    assert records[0].aciklama == "Not"
+    assert [error.row_number for error in result.row_errors] == [7]

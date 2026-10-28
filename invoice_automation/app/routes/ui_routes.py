@@ -503,9 +503,9 @@ def _render(request: Request, template: str, **context: Any) -> HTMLResponse:
     """Render a page with the shared header state and flash message."""
 
     return templates.TemplateResponse(
+        request,
         template,
         {
-            "request": request,
             "portal_state": portal_session_manager.state,
             "flash": request.query_params.get("msg"),
             "flash_error": request.query_params.get("err") == "1",

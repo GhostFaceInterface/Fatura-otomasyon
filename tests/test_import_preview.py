@@ -162,13 +162,31 @@ def test_check_preview_rows_marks_errors_per_field_and_duplicate_tckn() -> None:
     )
 
     assert rows[0].errors == {}
-    assert rows[0].warnings == {"tc_kimlik_no": "Listede 2 kez var."}
+    assert rows[0].warnings == {"tc_kimlik_no": "Aynı TCKN: yeni eklenen satır Ayse"}
     assert rows[1].errors == {"soyad": "Soyad boş olamaz."}
     assert rows[2].errors == {} and rows[2].warnings == {}
     assert rows[3].errors == {}
 
     summary = summarize_preview(rows)
     assert summary == {"count": 2, "total_usd": "100.00", "error_count": 1, "removed_count": 1}
+
+
+def test_duplicate_tckn_warning_names_the_other_rows() -> None:
+    rows = check_preview_rows(
+        [
+            _row(ad="FATIM", soyad="KAYA", tc="60763196402", source_row=13),
+            _row(ad="HEDİYE", soyad="ÇEBER", tc="60763196402", source_row=56),
+            _row(ad="Ali", soyad="Veli", tc="60763196402"),  # added by hand, no row number
+            _row(ad="Tek", soyad="Kişi", tc="11111111111", source_row=14),
+        ]
+    )
+
+    assert [row.warnings.get("tc_kimlik_no") for row in rows] == [
+        "Aynı TCKN: 56. satır HEDİYE ÇEBER, yeni eklenen satır Ali Veli",
+        "Aynı TCKN: 13. satır FATIM KAYA, yeni eklenen satır Ali Veli",
+        "Aynı TCKN: 13. satır FATIM KAYA, 56. satır HEDİYE ÇEBER",
+        None,
+    ]
 
 
 @pytest.mark.parametrize(

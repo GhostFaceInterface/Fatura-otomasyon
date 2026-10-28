@@ -29,7 +29,7 @@ http://127.0.0.1:8010
    - `Sil` satiri cikarir (ustu cizili kalir), `Geri al` geri getirir.
    - `+ Kisi ekle` tablonun sonuna bos bir satir ekler. Bos birakilan yeni satir yok sayilir.
    - Hatali hucreler kirmizi ve altinda sebebi yazar. Hata varken ice aktarma butonu kapalidir; duzelt ya da `Hatalilarin hepsini sil`.
-   - Ayni TCKN listede birden fazla varsa sari uyari cikar ama engellemez.
+   - Ayni TCKN listede birden fazla varsa sari uyari cikar ama engellemez. Uyari cakisan satirin numarasini ve kisisini gosterir (orn. `Aynı TCKN: 56. satır HEDİYE ÇEBER`); hangisinin yanlis oldugunu Excel'in diger sayfalariyla karsilastir.
    - Ustteki arama ve `Tumu / Hatali / Degistirilen / Yeni eklenen / Silinen` secimi uzun listede bulmayi kolaylastirir.
 5. En alttaki `Donem adi` kutusuna yaz (ornek: `Ekim 2026 umre`) ve `N kisiyi ice aktar`a tikla; onay sorusu kac kisinin hangi doneme aktarilacagini soyler. Enter tusu hicbir kutuda ice aktarma yapmaz; listede aramak icin en ustteki `Listede ara` kutusu kullanilir ve yazdikca suzer.
 

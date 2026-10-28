@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections import Counter
+from collections import defaultdict
 from dataclasses import replace
 from decimal import Decimal, InvalidOperation
 import logging
@@ -359,20 +359,27 @@ def check_preview_rows(rows: list[PreviewRow]) -> list[PreviewRow]:
         is_used = not row.removed and any(values.values())
         cleaned.append(replace(row, values=values, errors=errors if is_used else {}, warnings={}))
 
-    tckn_counts = Counter(
-        row.values["tc_kimlik_no"]
-        for row in cleaned
-        if row.is_active and "tc_kimlik_no" not in row.errors
-    )
-    return [
-        replace(
-            row,
-            warnings={"tc_kimlik_no": f"Listede {tckn_counts[row.values['tc_kimlik_no']]} kez var."},
-        )
-        if row.is_active and tckn_counts.get(row.values["tc_kimlik_no"], 0) > 1
-        else row
-        for row in cleaned
-    ]
+    rows_by_tckn: dict[str, list[int]] = defaultdict(list)
+    for position, row in enumerate(cleaned):
+        if row.is_active and "tc_kimlik_no" not in row.errors:
+            rows_by_tckn[row.values["tc_kimlik_no"]].append(position)
+
+    checked = list(cleaned)
+    for positions in rows_by_tckn.values():
+        if len(positions) < 2:
+            continue
+        for position in positions:
+            others = ", ".join(_row_label(cleaned[other]) for other in positions if other != position)
+            checked[position] = replace(cleaned[position], warnings={"tc_kimlik_no": f"Aynı TCKN: {others}"})
+    return checked
+
+
+def _row_label(row: PreviewRow) -> str:
+    """Name a row the way the preview shows it, e.g. '56. satır HEDİYE ÇEBER'."""
+
+    where = f"{row.source_row}. satır" if row.source_row is not None else "yeni eklenen satır"
+    name = f"{row.values['ad']} {row.values['soyad']}".strip()
+    return f"{where} {name}".strip()
 
 
 def check_row_values(values: dict[str, Any]) -> tuple[dict[str, str], dict[str, str]]:

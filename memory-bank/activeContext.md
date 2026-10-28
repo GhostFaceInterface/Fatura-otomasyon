@@ -159,3 +159,12 @@ Ice aktarim onizlemesi (2026-10-27, branch `feat/ui-redesign`):
 - Tutar hucreden cikinca kanonik `1450.00` bicimine yazilir; bu bicim tekrar parse edildiginde degismez (ondalik nokta + 2 hane, binlik sanilmaz). 2'den fazla ondalik hata (Excel float gurultusu <1e-6 yuvarlanir).
 - Hata varken buton kapali; sunucu yine de tum satirlari tekrar kontrol eder, tek hata varsa hicbir sey yazmaz ve ayni tabloyu hata mesajiyla geri cizer. Silinen ve bos yeni satirlar import edilmez ve hata uretmez. Ayni TCKN uyari (engellemez).
 - Tarayici panelinde (Claude Browser) otomasyon adimlari arasinda sayfa zamanlayicilari bazen donuyor; canli kontrol gecikmis gorunebilir. Gercek tarayicida ve JS ile beklenince dogru calisti.
+
+Donem sayfasinda tutar duzenleme (2026-10-28, branch `feat/ui-redesign`):
+
+- Kullanici import sonrasi donem sayfasinda fiyat guncellemek istedi. Ayrica 8010 panelinde onizleme gorunmuyordu: panel `/Users/boe747/otomasyon` (main) uzerinden calisiyor ve PR #5 birlesmemisti. PR #5 ve PR #6 (Excel baslik satiri bulma + TemplateResponse) main'e birlesti; o klasorde yerel main `git merge -X theirs origin/main` ile origin/main'e esitlendi (eski yerel commitler gecmiste duruyor) ve panel uygulamanin Terminal panelinde `.venv/bin/python run.py` ile yeniden baslatildi.
+- `AMOUNT_EDITABLE_STATUSES` = BATCH_ELIGIBLE + RETRYABLE. `repository.update_amounts` status kosulunu UPDATE icinde uygular; `RecordEditService.update_amount` ayni `parse_amount` kurallariyla okur, donemde aktif job varsa `RecordEditBlockedError`, eski tutarlari loglar.
+- UI: satirda `.amount-input` (Enter/blur kaydeder, Esc geri alir, `POST /records/{id}/amount` JSON), alt cubukta secililere toplu tutar (`POST /periods/{id}/records/amount`, PRG flash). Toplu tutar alaninda Enter `requestSubmit(amountButton)` ile gider; aksi halde formun ilk butonu `Secilileri sil` tetiklenirdi.
+- Global `[hidden] { display: none !important; }` eklendi; `.row` gibi display sinifi hidden attribute'u eziyordu.
+- Onizleme toplami artik sadece hatasiz satirlari sayar; gercek odeme listelerinin alttaki toplam satiri (ad/soyad/TC bos, tutar dolu) hata satiri olarak gorunup toplami ikiye katliyordu.
+- Testler `/Users/boe747/otomasyon/.venv/bin/python` ile calistirilir (`/Users/boe747/Project/otomasyon` artik yok).

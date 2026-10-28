@@ -23,6 +23,7 @@ from pydantic import BaseModel
 from invoice_automation.app.automation.session_manager import portal_session_manager
 from invoice_automation.app.config import ROOT_DIR, ensure_runtime_directories, settings
 from invoice_automation.app.constants import (
+    AMOUNT_EDITABLE_STATUSES,
     BATCH_ELIGIBLE_STATUSES,
     RETRYABLE_STATUSES,
     InvoiceStatus,
@@ -40,12 +41,14 @@ from invoice_automation.app.services.import_service import (
     normalize_column_name,
     summarize_preview,
 )
+from invoice_automation.app.services.record_edit_service import RecordEditService
 from invoice_automation.app.services.selection_service import SelectionService
 from invoice_automation.app.utils.exceptions import (
     BatchJobAlreadyRunningError,
     DeletionBlockedError,
     ImportValidationError,
     PortalSessionError,
+    RecordEditBlockedError,
 )
 
 logger = logging.getLogger(__name__)
@@ -55,6 +58,7 @@ templates = Jinja2Templates(directory=str(ROOT_DIR / "invoice_automation" / "app
 
 ELIGIBLE_STATUS_VALUES = frozenset(status.value for status in BATCH_ELIGIBLE_STATUSES)
 RETRYABLE_STATUS_VALUES = frozenset(status.value for status in RETRYABLE_STATUSES)
+AMOUNT_EDITABLE_STATUS_VALUES = frozenset(status.value for status in AMOUNT_EDITABLE_STATUSES)
 STATUS_GROUPS = (
     ("waiting", "Bekliyor"),
     ("success", "Taslak oluştu"),
@@ -83,6 +87,7 @@ templates.env.filters["status_tone"] = status_tone
 templates.env.filters["status_group"] = status_group
 templates.env.globals["RETRYABLE_STATUS_VALUES"] = RETRYABLE_STATUS_VALUES
 templates.env.globals["STATUS_GROUPS"] = STATUS_GROUPS
+templates.env.globals["AMOUNT_EDITABLE_STATUS_VALUES"] = AMOUNT_EDITABLE_STATUS_VALUES
 # Changes with the stylesheet so browsers never keep a stale cached copy.
 templates.env.globals["CSS_VERSION"] = int(
     (ROOT_DIR / "invoice_automation" / "app" / "static" / "css" / "app.css").stat().st_mtime
@@ -157,6 +162,28 @@ def delete_period_records(
     except DeletionBlockedError as exc:
         return _redirect(f"/periods/{batch_id}", str(exc), error=True)
     return _redirect(f"/periods/{batch_id}", f"{deleted} kişi silindi.")
+
+
+@router.post("/periods/{batch_id}/records/amount")
+def update_period_amounts(
+    batch_id: int,
+    record_ids: list[int] | None = Form(default=None),
+    amount: str = Form(default=""),
+) -> RedirectResponse:
+    """Give the checked people of a period one new amount."""
+
+    target = f"/periods/{batch_id}"
+    wanted = set(record_ids or [])
+    if not wanted:
+        return _redirect(target, "Kişi seçilmedi.", error=True)
+    try:
+        updated, shown = RecordEditService().update_amount(sorted(wanted), amount, batch_id=batch_id)
+    except (ValueError, RecordEditBlockedError) as exc:
+        return _redirect(target, str(exc), error=True)
+    message = f"{updated} kişinin tutarı {shown} USD yapıldı."
+    if updated < len(wanted):
+        message += f" {len(wanted) - updated} kişi değişmedi (taslağı oluşmuş, işleniyor veya kontrol bekliyor)."
+    return _redirect(target, message, error=updated == 0)
 
 
 @router.post("/periods/{batch_id}/draft")
@@ -282,6 +309,30 @@ def delete_record(record_id: int, next: str = Form(default="/")) -> RedirectResp
     if not deleted:
         return _redirect(next, "İşlenmekte olan kayıt silinemez.", error=True)
     return _redirect(next, f"{record.ad} {record.soyad} silindi.")
+
+
+@router.post("/records/{record_id}/amount")
+def update_record_amount(record_id: int, amount: str = Form(default="")) -> JSONResponse:
+    """Change one person's amount from the period table (answers JSON)."""
+
+    repository = InvoiceRecordRepository()
+    record = repository.get(record_id)
+    if record is None or record.batch_id is None:
+        return JSONResponse({"error": "Kayıt bulunamadı."}, status_code=404)
+    try:
+        updated, shown = RecordEditService(repository=repository).update_amount(
+            [record_id], amount, batch_id=record.batch_id
+        )
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+    except RecordEditBlockedError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=409)
+    if not updated:
+        return JSONResponse(
+            {"error": "Bu kişinin tutarı artık değiştirilemez; sayfayı yenile."}, status_code=409
+        )
+    total = sum(item.tutar_usd for item in repository.list_all(batch_id=record.batch_id))
+    return JSONResponse({"amount": shown, "total_usd": f"{total:.2f}"})
 
 
 # --- Dosya yükleme --------------------------------------------------------------

@@ -168,7 +168,7 @@ def test_check_preview_rows_marks_errors_per_field_and_duplicate_tckn() -> None:
     assert rows[3].errors == {}
 
     summary = summarize_preview(rows)
-    assert summary == {"count": 2, "total_usd": "200.00", "error_count": 1, "removed_count": 1}
+    assert summary == {"count": 2, "total_usd": "100.00", "error_count": 1, "removed_count": 1}
 
 
 @pytest.mark.parametrize(

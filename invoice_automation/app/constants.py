@@ -71,6 +71,9 @@ RETRYABLE_STATUSES = (
     InvoiceStatus.FAILED_UNKNOWN,
     InvoiceStatus.ABORTED_SESSION_LOST,
 )
+# Records whose amount may still be changed: no draft exists for them on the
+# portal and none is being created right now.
+AMOUNT_EDITABLE_STATUSES = (*BATCH_ELIGIBLE_STATUSES, *RETRYABLE_STATUSES)
 STALE_IN_PROGRESS_ERROR_CODE = "StaleInProgressRecovered"
 
 # Operator-facing label and badge tone for each status. Raw codes stay in the DB

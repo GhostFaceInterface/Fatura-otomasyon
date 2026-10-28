@@ -20,6 +20,8 @@
 }
 
 * { box-sizing: border-box; }
+/* Layout classes such as .row set display; keep the hidden attribute stronger. */
+[hidden] { display: none !important; }
 
 body {
   margin: 0;
@@ -235,6 +237,12 @@ td.num .cell-input { text-align: right; font-variant-numeric: tabular-nums; }
 .cell.has-warning .cell-msg { color: var(--warning-fg); }
 tr.removed .cell-input { background: var(--surface); border-color: transparent; color: var(--muted); text-decoration: line-through; }
 tr.removed td.row-no { opacity: 0.5; }
+
+/* Period page: editable amount */
+.amount-input { width: 112px; text-align: right; font-variant-numeric: tabular-nums; }
+.amount-input.saved { border-color: #86efac; background: var(--success-bg); }
+.amount-input.invalid { border-color: var(--danger); }
+td.num .cell-msg { text-align: right; margin-left: auto; max-width: 180px; }
 
 details summary { cursor: pointer; color: var(--accent); }
 ol.steps { padding-left: 20px; margin: 8px 0 0; }

@@ -108,6 +108,32 @@ def test_invoice_form_filler_maps_record_data_to_portal_fields() -> None:
         "302-11/1-a Hizmet ihracatı",
     ) in page.actions
     assert ("evaluate", 'select[name="istisnaListname"]') in page.actions
+    # No açıklama: the invoice's Açıklama/Notlar box is left alone.
+    assert not [action for action in page.actions if action[:2] == ("fill", "#Note")]
+
+
+def test_invoice_form_filler_writes_aciklama_into_the_invoice_note() -> None:
+    page = FakePage()
+    form_data = InvoiceFormData(
+        record_id=1,
+        ad="Ali",
+        soyad="Yilmaz",
+        tc_kimlik_no="12345678901",
+        tutar_usd=1000.0,
+        mal_hizmet_adi="YURT DIŞI KONAKLAMA BEDELİ",
+        il="**",
+        ilce="**",
+        para_birimi="USD",
+        kdv_orani="0",
+        istisna_target_text="302-11/1-a Hizmet ihracatı",
+        istisna_option_value=None,
+        aciklama="100$ İSKONTO",
+    )
+
+    InvoiceFormFiller(timeout_ms=30_000).fill_form(page, form_data)
+
+    assert ("fill", "#Note", "100$ İSKONTO") in page.actions
+    assert ("fill", "#MalAdi", "YURT DIŞI KONAKLAMA BEDELİ") in page.actions
 
 
 def test_invoice_form_filler_raises_when_turmob_name_does_not_match() -> None:
@@ -275,3 +301,21 @@ def test_invoice_form_filler_still_rejects_non_vowel_name_differences(
     with pytest.raises(NameMismatchError):
         InvoiceFormFiller(timeout_ms=30_000).fill_form(page, _name_form_data(ad, soyad))
 
+
+
+@pytest.mark.parametrize(("aciklama", "note"), [(" 50$ İSKONTO ", "50$ İSKONTO"), ("", ""), (None, "")])
+def test_service_name_is_always_the_fixed_setting(aciklama, note) -> None:
+    from invoice_automation.app.config import settings
+    from invoice_automation.app.db.models import InvoiceRecord
+
+    record = InvoiceRecord(
+        id=1, batch_id=1, ad="Ali", soyad="Yilmaz", tc_kimlik_no="12345678901", tutar_usd=1450.0,
+        aciklama=aciklama, fatura_tipi_hedef="E_ARSIV", kaynak_dosya=None, kaynak_satir_no=None,
+        secili_mi=False, islem_durumu="PENDING", portal_ref_no=None, hata_kodu=None, hata_mesaji=None,
+        olusturma_zamani="", guncelleme_zamani="",
+    )
+
+    # The açıklama goes to the invoice note; it must never replace the service name.
+    form_data = InvoiceFormData.from_record(record)
+    assert form_data.mal_hizmet_adi == settings.mal_hizmet_adi
+    assert form_data.aciklama == note

@@ -35,26 +35,30 @@ class InvoiceFormData:
     kdv_orani: str
     istisna_target_text: str
     istisna_option_value: str | None
+    aciklama: str = ""
 
     @classmethod
     def from_record(cls, record: InvoiceRecord) -> "InvoiceFormData":
-        """Create form data from a persisted invoice record."""
+        """Create form data from a persisted invoice record.
 
-        description = (record.aciklama or "").strip()
-        service_name = description or settings.mal_hizmet_adi
+        The service name is always the fixed MAL_HIZMET_ADI setting. The
+        record's açıklama goes to the invoice's Açıklama/Notlar box only.
+        """
+
         return cls(
             record_id=record.id,
             ad=record.ad,
             soyad=record.soyad,
             tc_kimlik_no=record.tc_kimlik_no,
             tutar_usd=record.tutar_usd,
-            mal_hizmet_adi=service_name,
+            mal_hizmet_adi=settings.mal_hizmet_adi,
             il=settings.default_il,
             ilce=settings.default_ilce,
             para_birimi=settings.para_birimi,
             kdv_orani=settings.kdv_orani,
             istisna_target_text=settings.istisna_target_text,
             istisna_option_value=settings.istisna_option_value,
+            aciklama=(record.aciklama or "").strip(),
         )
 
 
@@ -143,6 +147,13 @@ class InvoiceFormFiller:
             form_data.istisna_target_text,
             form_data.istisna_option_value,
         )
+        if form_data.aciklama:
+            self._fill_locator(
+                page,
+                self.selectors.note_selector,
+                form_data.aciklama,
+                "Aciklama/Notlar alani doldurulamadi.",
+            )
         logger.info("Fatura formu dolduruldu | record_id=%s", form_data.record_id)
 
     def _fill_locator(self, page: Any, selector: str, value: str, error_message: str) -> None:

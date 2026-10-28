@@ -29,6 +29,7 @@ class PortalSelectors:
     price_amount_selector: str = 'input[name="Price_Amount"]'
     tax_selector: str = "#Tax_Perc0015"
     exemption_selector: str = 'select[name="istisnaListname"]'
+    note_selector: str = "#Note"  # Açıklama / Notlar box under the invoice lines
     save_draft_button_name: str = "Taslak Kaydet   "
 
 

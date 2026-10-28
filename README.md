@@ -280,7 +280,7 @@ Uygulama Excel veya CSV içinden aşağıdaki alanları bekler.
 | `soyad` | Evet | Kişinin soyadı. |
 | `tc_kimlik_no` | Evet | TC kimlik numarası veya portalın beklediği kimlik bilgisi. |
 | `tutar_usd` | Evet | USD cinsinden fatura tutarı. |
-| `aciklama` | Hayır | Kayıt açıklaması veya operasyon notu. |
+| `aciklama` | Hayır | Faturanın Açıklama / Notlar kutusuna yazılır (boşsa kutu boş kalır). Mal/Hizmet adını değiştirmez; o her zaman `MAL_HIZMET_ADI` ayarıdır. |
 
 Tutar alanı farklı yazımları normalize edecek şekilde ele alınır:
 

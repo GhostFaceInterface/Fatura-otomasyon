@@ -25,6 +25,7 @@ http://127.0.0.1:8010
 3. Ad, Soyad, TC kimlik no ve Tutar (USD) kolonlarini sec; Aciklama istege baglidir. `Onizle`.
 4. Onizleme ekraninda dosyadaki kisiler duzenlenebilir bir tabloda gelir. Bu noktada veritabanina hicbir sey yazilmamistir.
    - Hucreye tiklayip ad, soyad, TCKN, tutar veya aciklamayi duzelt. Degisen hucre sari olur; uzerine gelince dosyadaki eski deger gorunur.
+   - Aciklama faturanin Açıklama / Notlar kutusuna yazilir; bos birakirsan kutu bos kalir. Mal/Hizmet adi her zaman `YURT DIŞI KONAKLAMA BEDELİ` olur.
    - Tutar `1450`, `1.450`, `1450,50` veya `1.450,50` gibi yazilabilir; hucreden cikinca `1450.00` bicimine doner. Boylece kaydedilecek deger ekranda gorunur.
    - `Sil` satiri cikarir (ustu cizili kalir), `Geri al` geri getirir.
    - `+ Kisi ekle` tablonun sonuna bos bir satir ekler. Bos birakilan yeni satir yok sayilir.

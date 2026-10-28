@@ -168,3 +168,9 @@ Donem sayfasinda tutar duzenleme (2026-10-28, branch `feat/ui-redesign`):
 - Global `[hidden] { display: none !important; }` eklendi; `.row` gibi display sinifi hidden attribute'u eziyordu.
 - Onizleme toplami artik sadece hatasiz satirlari sayar; gercek odeme listelerinin alttaki toplam satiri (ad/soyad/TC bos, tutar dolu) hata satiri olarak gorunup toplami ikiye katliyordu.
 - Testler `/Users/boe747/otomasyon/.venv/bin/python` ile calistirilir (`/Users/boe747/Project/otomasyon` artik yok).
+
+Onizlemede yanlislikla ice aktarma (2026-10-28):
+
+- Kullanici aramak icin en ustteki `Donem adi` kutusuna "ersöz" yazip Enter'a basti; form implicit submit ile 34 kisiyi "ersöz" donemi olarak ice aktardi. Donem 13 (hepsi PENDING) panelin `POST /periods/13/delete` aksiyonuyla silindi.
+- Duzeltme: onizleme formunda hicbir input'ta Enter submit etmez; `Donem adi` alt cubuga ice aktar butonunun yanina tasindi, en ustteki ilk kutu `Listede ara`; ice aktar butonu `N kisi "ad" donemi olarak ice aktarilacak` onayini sorar.
+- Kural: formun icindeki her text input (arama dahil) Enter ile yikici/kalici bir aksiyonu tetiklememeli.

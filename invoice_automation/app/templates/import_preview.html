@@ -29,12 +29,7 @@
   {{ mapping_fields() }}
   <input type="hidden" name="rows_json" id="rows-json">
 
-  <div class="field">
-    <label for="batch_name">Dönem adı</label>
-    <input id="batch_name" name="batch_name" type="text" value="{{ batch_name }}" placeholder="Örn. Ekim 2026 umre" required autocomplete="off">
-  </div>
-
-  <p class="muted">Tabloda gördüğün kişiler içe aktarılır. Hücreye tıklayıp düzeltebilir, satır silebilir veya kişi ekleyebilirsin. Değiştirdiğin hücreler sarı, hatalı olanlar kırmızı görünür.</p>
+  <p class="muted">Tabloda gördüğün kişiler içe aktarılır. Hücreye tıklayıp düzeltebilir, satır silebilir veya kişi ekleyebilirsin. Değiştirdiğin hücreler sarı, hatalı olanlar kırmızı görünür. Bitince en alta dönem adını yazıp içe aktar.</p>
 
   <div class="note note-error" id="error-note" hidden>
     <div class="row">
@@ -46,7 +41,7 @@
   </div>
 
   <div class="row" style="margin-bottom: 12px">
-    <input type="search" id="search" placeholder="Ad, soyad veya TCKN ara" autocomplete="off" style="flex: 1; min-width: 200px; max-width: 360px">
+    <input type="search" id="search" placeholder="Listede ara: ad, soyad veya TCKN" aria-label="Listede ara" autocomplete="off" style="flex: 1; min-width: 200px; max-width: 360px">
     <select id="view" aria-label="Gösterilen satırlar"></select>
   </div>
 
@@ -72,9 +67,11 @@
 
   <div class="actionbar">
     <span id="summary"></span>
+    <button type="button" class="btn" id="add-row">+ Kişi ekle</button>
     <span class="spacer"></span>
     <span id="submit-reason" class="small muted"></span>
-    <button type="button" class="btn" id="add-row">+ Kişi ekle</button>
+    <input id="batch_name" name="batch_name" type="text" value="{{ batch_name }}" placeholder="Dönem adı (örn. Ekim 2026 umre)"
+      aria-label="Dönem adı" required autocomplete="off" style="width: 250px">
     <button type="submit" class="btn btn-primary" id="submit-import" disabled>İçe aktar</button>
   </div>
 </form>
@@ -403,6 +400,18 @@
 
     search.addEventListener("input", applyFilter);
     view.addEventListener("change", applyFilter);
+
+    // Enter never imports: only a click on the import button does, and it asks first.
+    form.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && event.target instanceof HTMLInputElement) event.preventDefault();
+    });
+    const batchName = document.getElementById("batch_name");
+    submitButton.addEventListener("click", () => {
+      const name = batchName.value.trim();
+      submitButton.dataset.confirm = name
+        ? `${summary.count} kişi "${name}" dönemi olarak içe aktarılacak. Devam edilsin mi?`
+        : "";
+    });
 
     form.addEventListener("submit", () => {
       document.getElementById("rows-json").value = JSON.stringify(rows.filter((row) => !row.discarded).map(payload));

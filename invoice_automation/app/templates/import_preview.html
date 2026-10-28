@@ -1,0 +1,426 @@
+{% extends "base.html" %}
+{% block title %}Önizleme · e-Arşiv Taslak{% endblock %}
+
+{% macro mapping_fields() %}
+<input type="hidden" name="saved_path" value="{{ saved_path }}">
+<input type="hidden" name="sheet_name" value="{{ sheet_name }}">
+{% for field, column in mapping.items() %}
+<input type="hidden" name="map_{{ field }}" value="{{ column }}">
+{% endfor %}
+{% endmacro %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Önizleme</h1>
+    <p class="sub">{{ display_name }}{% if sheet_name != "CSV" %} · {{ sheet_name }}{% endif %} · Henüz hiçbir şey kaydedilmedi.</p>
+  </div>
+  <form action="/import/inspect" method="post">
+    {{ mapping_fields() }}
+    <button type="submit" class="btn" id="back-button">Kolonları değiştir</button>
+  </form>
+</div>
+
+{% if error %}
+<div class="flash flash-error">{{ error }}</div>
+{% endif %}
+
+<form action="/import/confirm" method="post" id="import-form">
+  {{ mapping_fields() }}
+  <input type="hidden" name="rows_json" id="rows-json">
+
+  <div class="field">
+    <label for="batch_name">Dönem adı</label>
+    <input id="batch_name" name="batch_name" type="text" value="{{ batch_name }}" placeholder="Örn. Ekim 2026 umre" required autocomplete="off">
+  </div>
+
+  <p class="muted">Tabloda gördüğün kişiler içe aktarılır. Hücreye tıklayıp düzeltebilir, satır silebilir veya kişi ekleyebilirsin. Değiştirdiğin hücreler sarı, hatalı olanlar kırmızı görünür.</p>
+
+  <div class="note note-error" id="error-note" hidden>
+    <div class="row">
+      <span id="error-note-text"></span>
+      <span class="spacer"></span>
+      <button type="button" class="btn btn-sm" id="show-errors">Hatalıları göster</button>
+      <button type="button" class="btn btn-sm btn-danger" id="remove-errors">Hatalıların hepsini sil</button>
+    </div>
+  </div>
+
+  <div class="row" style="margin-bottom: 12px">
+    <input type="search" id="search" placeholder="Ad, soyad veya TCKN ara" autocomplete="off" style="flex: 1; min-width: 200px; max-width: 360px">
+    <select id="view" aria-label="Gösterilen satırlar"></select>
+  </div>
+
+  <div class="table-wrap">
+    <table class="preview" data-show-aciklama="{{ '1' if show_aciklama else '0' }}">
+      <thead>
+        <tr>
+          <th class="num" title="Dosyadaki satır numarası">Satır</th>
+          <th>Ad</th>
+          <th>Soyad</th>
+          <th>TCKN</th>
+          <th class="num">Tutar (USD)</th>
+          {% if show_aciklama %}<th>Açıklama</th>{% endif %}
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="rows"></tbody>
+      <tbody>
+        <tr id="no-match" hidden><td colspan="{{ 7 if show_aciklama else 6 }}" class="empty">Gösterilecek satır yok.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="actionbar">
+    <span id="summary"></span>
+    <span class="spacer"></span>
+    <span id="submit-reason" class="small muted"></span>
+    <button type="button" class="btn" id="add-row">+ Kişi ekle</button>
+    <button type="submit" class="btn btn-primary" id="submit-import" disabled>İçe aktar</button>
+  </div>
+</form>
+
+<script id="preview-data" type="application/json">{{ {"rows": rows, "summary": summary}|tojson }}</script>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  (() => {
+    const data = JSON.parse(document.getElementById("preview-data").textContent);
+    const table = document.querySelector("table.preview");
+    const FIELDS = ["ad", "soyad", "tc_kimlik_no", "tutar_usd"];
+    if (table.dataset.showAciklama === "1") FIELDS.push("aciklama");
+    const ALL_FIELDS = ["ad", "soyad", "tc_kimlik_no", "tutar_usd", "aciklama"];
+    const LABELS = { ad: "Ad", soyad: "Soyad", tc_kimlik_no: "TCKN", tutar_usd: "Tutar (USD)", aciklama: "Açıklama" };
+    const VIEWS = [
+      ["all", "Tümü"],
+      ["error", "Hatalı"],
+      ["changed", "Değiştirilen"],
+      ["new", "Yeni eklenen"],
+      ["removed", "Silinen"],
+    ];
+
+    const form = document.getElementById("import-form");
+    const tbody = document.getElementById("rows");
+    const noMatch = document.getElementById("no-match");
+    const search = document.getElementById("search");
+    const view = document.getElementById("view");
+    const summaryText = document.getElementById("summary");
+    const submitButton = document.getElementById("submit-import");
+    const submitReason = document.getElementById("submit-reason");
+    const errorNote = document.getElementById("error-note");
+    const errorNoteText = document.getElementById("error-note-text");
+    const backButton = document.getElementById("back-button");
+
+    let summary = data.summary;
+    let seq = 0;
+    let timer = null;
+    let pending = false;
+    let checkFailed = false;
+    let dirty = false;
+    let submitting = false;
+
+    const blankValues = () => Object.fromEntries(ALL_FIELDS.map((field) => [field, ""]));
+    const isBlank = (row) => ALL_FIELDS.every((field) => !(row.values[field] || "").trim());
+    const isActive = (row) => !row.discarded && !row.removed && !isBlank(row);
+    const hasErrors = (row) => isActive(row) && Object.keys(row.errors).length > 0;
+    const isChanged = (row) => isActive(row) && row.original !== null
+      && FIELDS.some((field) => row.values[field] !== row.original[field]);
+    const isNew = (row) => !row.discarded && row.original === null;
+
+    const rows = data.rows.map((item) => ({
+      source_row: item.source_row,
+      values: { ...blankValues(), ...item.values },
+      original: item.original,
+      removed: item.removed,
+      errors: item.errors || {},
+      warnings: item.warnings || {},
+      discarded: false,
+    }));
+
+    const payload = (row) => ({
+      values: { ...row.values },
+      source_row: row.source_row,
+      original: row.original,
+      removed: row.removed,
+    });
+
+    // --- Drawing ---------------------------------------------------------------
+
+    const buildRow = (row) => {
+      const tr = document.createElement("tr");
+      row.el = tr;
+      row.inputs = {};
+      row.cells = {};
+      row.msgs = {};
+
+      const numberCell = document.createElement("td");
+      numberCell.className = "num row-no";
+      if (row.source_row !== null) {
+        numberCell.textContent = row.source_row;
+      } else {
+        const badge = document.createElement("span");
+        badge.className = "badge tone-info";
+        badge.textContent = "Yeni";
+        numberCell.append(badge);
+      }
+      tr.append(numberCell);
+
+      FIELDS.forEach((field) => {
+        const cell = document.createElement("td");
+        cell.className = "cell" + (field === "tutar_usd" ? " num" : "");
+        cell.dataset.field = field;
+        const input = document.createElement("input");
+        input.type = "text";
+        input.className = "cell-input";
+        input.value = row.values[field] || "";
+        input.autocomplete = "off";
+        input.spellcheck = false;
+        input.setAttribute("aria-label", LABELS[field]);
+        if (field === "tc_kimlik_no") input.inputMode = "numeric";
+        if (field === "tutar_usd") input.inputMode = "decimal";
+        input.addEventListener("input", () => {
+          row.values[field] = input.value;
+          markDirty();
+          scheduleCheck();
+        });
+        // Leaving a cell shows its cleaned value (e.g. "1.450" -> "1450.00").
+        input.addEventListener("blur", () => scheduleCheck());
+        input.addEventListener("keydown", (event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            focusBelow(row, field);
+          }
+        });
+        const message = document.createElement("div");
+        message.className = "cell-msg";
+        cell.append(input, message);
+        row.inputs[field] = input;
+        row.cells[field] = cell;
+        row.msgs[field] = message;
+        tr.append(cell);
+      });
+
+      const actionCell = document.createElement("td");
+      actionCell.className = "actions";
+      const toggle = document.createElement("button");
+      toggle.type = "button";
+      toggle.className = "link-btn";
+      toggle.addEventListener("click", () => toggleRemove(row));
+      actionCell.append(toggle);
+      row.toggle = toggle;
+      tr.append(actionCell);
+
+      paintRow(row);
+      return tr;
+    };
+
+    const paintRow = (row) => {
+      row.el.classList.toggle("removed", row.removed);
+      row.toggle.textContent = row.removed ? "Geri al" : "Sil";
+      row.toggle.classList.toggle("danger", !row.removed);
+      FIELDS.forEach((field) => {
+        const input = row.inputs[field];
+        const cell = row.cells[field];
+        const error = row.removed ? "" : row.errors[field] || "";
+        const warning = row.removed ? "" : row.warnings[field] || "";
+        const changed = !row.removed && row.original !== null && row.values[field] !== row.original[field];
+        input.disabled = row.removed;
+        cell.classList.toggle("has-error", Boolean(error));
+        cell.classList.toggle("has-warning", !error && Boolean(warning));
+        cell.classList.toggle("changed", changed);
+        row.msgs[field].textContent = error || warning;
+        input.title = changed ? `Dosyada: ${row.original[field] || "(boş)"}` : "";
+      });
+    };
+
+    const paintSummary = () => {
+      const parts = [`${summary.count} kişi`, `${summary.total_usd} USD`];
+      if (summary.removed_count) parts.push(`${summary.removed_count} satır silindi`);
+      summaryText.textContent = parts.join(" · ");
+
+      const errorCount = summary.error_count;
+      errorNote.hidden = errorCount === 0;
+      errorNoteText.textContent = `${errorCount} satırda hata var. Düzelt ya da sil.`;
+
+      let reason = "";
+      if (checkFailed) reason = "Kontrol edilemedi, tekrar deneniyor…";
+      else if (errorCount) reason = "Önce hatalı satırları düzelt veya sil.";
+      else if (!summary.count) reason = "İçe aktarılacak kişi yok.";
+      submitReason.textContent = reason;
+      submitButton.disabled = pending || Boolean(reason);
+      submitButton.textContent = summary.count ? `${summary.count} kişiyi içe aktar` : "İçe aktar";
+
+      const counts = { all: rows.filter((row) => !row.discarded).length, error: 0, changed: 0, new: 0, removed: 0 };
+      rows.forEach((row) => {
+        if (hasErrors(row)) counts.error += 1;
+        if (isChanged(row)) counts.changed += 1;
+        if (isNew(row)) counts.new += 1;
+        if (!row.discarded && row.removed) counts.removed += 1;
+      });
+      const selected = view.value || "all";
+      view.replaceChildren(...VIEWS.map(([key, label]) => {
+        const option = document.createElement("option");
+        option.value = key;
+        option.textContent = `${label} (${counts[key]})`;
+        option.selected = key === selected;
+        return option;
+      }));
+    };
+
+    // Re-filtering only happens when the filter changes, so a row never jumps
+    // away while it is being edited.
+    const applyFilter = () => {
+      const term = search.value.trim().toLocaleLowerCase("tr");
+      const wanted = view.value || "all";
+      let shown = 0;
+      rows.forEach((row) => {
+        if (row.discarded) return;
+        const inView = wanted === "all"
+          || (wanted === "error" && hasErrors(row))
+          || (wanted === "changed" && isChanged(row))
+          || (wanted === "new" && isNew(row))
+          || (wanted === "removed" && row.removed);
+        const text = `${row.values.ad} ${row.values.soyad} ${row.values.tc_kimlik_no}`.toLocaleLowerCase("tr");
+        row.el.hidden = !(inView && (!term || text.includes(term)));
+        if (!row.el.hidden) shown += 1;
+      });
+      noMatch.hidden = shown > 0;
+    };
+
+    // --- Server check (the only place the rules live) -----------------------------
+
+    const scheduleCheck = () => {
+      seq += 1;
+      pending = true;
+      submitButton.disabled = true;
+      window.clearTimeout(timer);
+      timer = window.setTimeout(runCheck, 250);
+    };
+
+    const runCheck = async () => {
+      const mine = seq;
+      const sentRows = rows.filter((row) => !row.discarded);
+      const sent = sentRows.map(payload);
+      try {
+        const response = await fetch("/import/check", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Accept: "application/json" },
+          body: JSON.stringify(sent),
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const result = await response.json();
+        if (mine !== seq) return; // the table changed meanwhile; a newer check is coming
+        result.rows.forEach((checked, index) => {
+          const row = sentRows[index];
+          row.errors = checked.errors;
+          row.warnings = checked.warnings;
+          FIELDS.forEach((field) => {
+            const input = row.inputs[field];
+            if (document.activeElement !== input && input.value === sent[index].values[field]) {
+              input.value = checked.values[field];
+              row.values[field] = checked.values[field];
+            }
+          });
+          paintRow(row);
+        });
+        summary = result.summary;
+        pending = false;
+        checkFailed = false;
+        paintSummary();
+      } catch (error) {
+        if (mine !== seq) return;
+        checkFailed = true;
+        paintSummary();
+        submitButton.disabled = true;
+        timer = window.setTimeout(runCheck, 2000);
+      }
+    };
+
+    // --- Actions ---------------------------------------------------------------------
+
+    const markDirty = () => {
+      dirty = true;
+      backButton.dataset.confirm = "Tablodaki değişikliklerin kaybolacak. Kolon seçimine dönülsün mü?";
+    };
+
+    const toggleRemove = (row) => {
+      if (row.original === null && isBlank(row)) {
+        // An empty row that was just added has nothing to undo.
+        row.discarded = true;
+        row.el.remove();
+      } else {
+        row.removed = !row.removed;
+        markDirty();
+        paintRow(row);
+      }
+      scheduleCheck();
+    };
+
+    const focusBelow = (row, field) => {
+      let next = row.el.nextElementSibling;
+      while (next && (next.hidden || next.classList.contains("removed"))) next = next.nextElementSibling;
+      const target = rows.find((candidate) => candidate.el === next);
+      if (target) target.inputs[field].focus();
+    };
+
+    document.getElementById("add-row").addEventListener("click", () => {
+      const row = {
+        source_row: null,
+        values: blankValues(),
+        original: null,
+        removed: false,
+        errors: {},
+        warnings: {},
+        discarded: false,
+      };
+      rows.push(row);
+      tbody.append(buildRow(row));
+      search.value = "";
+      view.value = "all";
+      applyFilter();
+      paintSummary();
+      row.el.scrollIntoView({ block: "center" });
+      row.inputs.ad.focus();
+    });
+
+    document.getElementById("show-errors").addEventListener("click", () => {
+      search.value = "";
+      view.value = "error";
+      applyFilter();
+    });
+
+    document.getElementById("remove-errors").addEventListener("click", () => {
+      rows.filter(hasErrors).forEach((row) => {
+        if (row.original === null && isBlank(row)) return;
+        row.removed = true;
+        paintRow(row);
+      });
+      markDirty();
+      view.value = "all";
+      applyFilter();
+      scheduleCheck();
+    });
+
+    search.addEventListener("input", applyFilter);
+    view.addEventListener("change", applyFilter);
+
+    form.addEventListener("submit", () => {
+      document.getElementById("rows-json").value = JSON.stringify(rows.filter((row) => !row.discarded).map(payload));
+    });
+    // Registered after the shared handler in base.html, so a cancelled confirm is visible here.
+    document.addEventListener("submit", (event) => {
+      if (!event.defaultPrevented) submitting = true;
+    });
+    window.addEventListener("beforeunload", (event) => {
+      if (dirty && !submitting) {
+        event.preventDefault();
+        event.returnValue = "";
+      }
+    });
+
+    tbody.append(...rows.map(buildRow));
+    applyFilter();
+    paintSummary();
+  })();
+</script>
+{% endblock %}

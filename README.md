@@ -85,6 +85,7 @@ Uygulama kullanıcıdan gelen Excel/CSV dosyasını okur, kayıtları lokal veri
 | Veri alma | `.xlsx`, `.xls` ve `.csv` dosyalarını içeri aktarır. |
 | Excel desteği | Çok sheet'li Excel dosyalarında sheet seçimi yapabilir. |
 | Kolon eşleştirme | Ad, soyad, TCKN ve tutar alanlarını kullanıcı kontrollü eşleştirir. |
+| İçe aktarım önizlemesi | Kaydetmeden önce kişileri silme, ekleme ve tutar/alan düzeltme imkânı verir. |
 | Fatura dönemi | Her importu ayrı fatura dönemi olarak saklar. |
 | Kayıt kontrolü | Aktif fatura dönemindeki kayıtları listeler, arar, sıralar ve filtreler. |
 | Canlı arama | Ad, soyad veya TCKN yazıldıkça sonuçları beklemeden günceller. |
@@ -290,7 +291,7 @@ Tutar alanı farklı yazımları normalize edecek şekilde ele alınır:
 | `$1450.75` | 1450.75 USD |
 | `850` | 850 USD |
 
-Boş, metinsel veya parse edilemeyen tutarlar import sırasında satır bazlı hata olarak raporlanır.
+Boş, metinsel, sıfır/negatif veya 2'den fazla ondalık basamaklı tutarlar önizlemede ilgili hücrede hata olarak gösterilir; hata düzeltilmeden ya da satır silinmeden içe aktarılamaz.
 
 ---
 
@@ -320,7 +321,7 @@ flowchart TB
 
 ### 1. Veri yükleme
 
-Excel veya CSV dosyası içeri alınır. Excel dosyasında birden fazla sheet varsa kullanılacak sheet seçilir. Uygulama her importu ayrı bir fatura dönemi olarak saklar.
+Excel veya CSV dosyası içeri alınır. Excel dosyasında birden fazla sheet varsa kullanılacak sheet seçilir. Kolonlar seçildikten sonra kişiler düzenlenebilir bir önizleme tablosunda gelir: kişi silinebilir, eklenebilir, tutar ve diğer alanlar düzeltilebilir. Onaylanan tablo ayrı bir fatura dönemi olarak tek transaction'da kaydedilir.
 
 ### 2. Kayıt kontrolü ve seçim
 

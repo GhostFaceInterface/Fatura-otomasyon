@@ -27,6 +27,49 @@ class ImportSheetInspection:
     columns: list[str]
 
 
+PREVIEW_FIELDS = ("ad", "soyad", "tc_kimlik_no", "tutar_usd", "aciklama")
+
+
+@dataclass(frozen=True)
+class PreviewRow:
+    """One editable row of the import preview.
+
+    `values` are the strings shown in the table. `original` holds the values read
+    from the file (None for a person added by hand) so edits can be marked.
+    """
+
+    values: dict[str, str]
+    source_row: int | None = None
+    original: dict[str, str] | None = None
+    removed: bool = False
+    errors: dict[str, str] = field(default_factory=dict)
+    warnings: dict[str, str] = field(default_factory=dict)
+
+    @property
+    def is_blank(self) -> bool:
+        """Return whether every field is empty (an unused added row)."""
+
+        return not any(str(self.values.get(name, "")).strip() for name in PREVIEW_FIELDS)
+
+    @property
+    def is_active(self) -> bool:
+        """Return whether this row will be imported."""
+
+        return not self.removed and not self.is_blank
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return a JSON-serializable dictionary."""
+
+        return {
+            "values": self.values,
+            "source_row": self.source_row,
+            "original": self.original,
+            "removed": self.removed,
+            "errors": self.errors,
+            "warnings": self.warnings,
+        }
+
+
 @dataclass(frozen=True)
 class ImportResult:
     """Summary returned after importing an Excel or CSV file."""

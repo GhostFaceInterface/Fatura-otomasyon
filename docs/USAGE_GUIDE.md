@@ -22,11 +22,18 @@ http://127.0.0.1:8010
 
 1. `Dosya yukle` > Excel veya CSV sec > `Devam`.
 2. Excel'de birden fazla sayfa varsa `Sayfa` listesinden dogru sayfayi sec.
-3. `Donem adi` yaz (ornek: `Ekim 2026 umre`).
-4. Ad, Soyad, TC kimlik no ve Tutar (USD) kolonlarini sec; Aciklama istege baglidir.
-5. `Ice aktar`.
+3. Ad, Soyad, TC kimlik no ve Tutar (USD) kolonlarini sec; Aciklama istege baglidir. `Onizle`.
+4. Onizleme ekraninda dosyadaki kisiler duzenlenebilir bir tabloda gelir. Bu noktada veritabanina hicbir sey yazilmamistir.
+   - Hucreye tiklayip ad, soyad, TCKN, tutar veya aciklamayi duzelt. Degisen hucre sari olur; uzerine gelince dosyadaki eski deger gorunur.
+   - Tutar `1450`, `1.450`, `1450,50` veya `1.450,50` gibi yazilabilir; hucreden cikinca `1450.00` bicimine doner. Boylece kaydedilecek deger ekranda gorunur.
+   - `Sil` satiri cikarir (ustu cizili kalir), `Geri al` geri getirir.
+   - `+ Kisi ekle` tablonun sonuna bos bir satir ekler. Bos birakilan yeni satir yok sayilir.
+   - Hatali hucreler kirmizi ve altinda sebebi yazar. Hata varken ice aktarma butonu kapalidir; duzelt ya da `Hatalilarin hepsini sil`.
+   - Ayni TCKN listede birden fazla varsa sari uyari cikar ama engellemez.
+   - Ustteki arama ve `Tumu / Hatali / Degistirilen / Yeni eklenen / Silinen` secimi uzun listede bulmayi kolaylastirir.
+5. `Donem adi` yaz (ornek: `Ekim 2026 umre`) ve `N kisiyi ice aktar`.
 
-Sonuc ekraninda kac kisinin eklendigi ve atlanan satirlar (sebebiyle) gorunur. Yanlis dosya yuklendiyse `Geri al` donemi ve eklenen kisileri siler.
+Tabloda ne gorunuyorsa o aktarilir. Sunucu tum satirlari ayni kurallarla tekrar kontrol eder; tek bir hata bile varsa hicbir kayit yazilmaz. Hata yoksa donem ve tum kisiler tek seferde (tek transaction) yazilir ve donem sayfasi acilir. Yanlis dosya yuklendiyse donem sayfasindaki `Donemi sil` donemi ve eklenen kisileri siler.
 
 ## 3. Donemler
 

@@ -17,7 +17,7 @@
 <div class="page-head">
   <div>
     <h1>Kolonları seç</h1>
-    <p class="sub">{{ inspection.source_file.split("_", 1)[-1] }}</p>
+    <p class="sub">{{ inspection.source_file.split("_", 1)[-1] }} · Sonraki adımda kişileri kontrol edip düzenleyebilirsin.</p>
   </div>
   <a class="btn" href="/upload">Başka dosya</a>
 </div>
@@ -34,14 +34,9 @@
 </form>
 {% endif %}
 
-<form action="/import/confirm" method="post">
+<form action="/import/preview" method="post">
   <input type="hidden" name="saved_path" value="{{ saved_path }}">
   <input type="hidden" name="sheet_name" value="{{ inspection.selected_sheet }}">
-
-  <div class="field">
-    <label for="batch_name">Dönem adı</label>
-    <input id="batch_name" name="batch_name" type="text" placeholder="Örn. Ekim 2026 umre" required>
-  </div>
 
   <div class="grid-2">
     {{ column_select("ad", "Ad") }}
@@ -51,6 +46,6 @@
     {{ column_select("aciklama", "Açıklama", required=False) }}
   </div>
 
-  <button type="submit" class="btn btn-primary">İçe aktar</button>
+  <button type="submit" class="btn btn-primary">Önizle</button>
 </form>
 {% endblock %}

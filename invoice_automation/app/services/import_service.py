@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections import Counter
+from dataclasses import replace
 from decimal import Decimal, InvalidOperation
 import logging
 from pathlib import Path
@@ -14,14 +16,13 @@ from invoice_automation.app.constants import OPTIONAL_IMPORT_COLUMNS, REQUIRED_I
 from invoice_automation.app.db.models import ImportBatchCreate, InvoiceRecordCreate
 from invoice_automation.app.db.repository import InvoiceRecordRepository
 from invoice_automation.app.schemas.invoice_record import (
+    PREVIEW_FIELDS,
     ImportResult,
     ImportSheetInspection,
+    PreviewRow,
     RowValidationError,
 )
-from invoice_automation.app.services.validation_service import (
-    validate_import_row,
-    validate_required_columns,
-)
+from invoice_automation.app.services.validation_service import validate_required_columns
 from invoice_automation.app.utils.exceptions import ImportValidationError, UnsupportedFileTypeError
 
 logger = logging.getLogger(__name__)
@@ -61,22 +62,7 @@ def parse_currency(value: Any) -> float:
     raw_value = str(value).strip()
     if not raw_value:
         raise ValueError("tutar_usd bos olamaz.")
-
-    cleaned = (
-        raw_value.replace("$", "")
-        .replace("\u00a0", "")
-        .replace(" ", "")
-        .strip()
-    )
-    if not cleaned:
-        raise ValueError("tutar_usd bos olamaz.")
-
-    normalized = _normalize_currency_separators(cleaned)
-    try:
-        amount = Decimal(normalized)
-        return _positive_decimal_to_float(amount)
-    except InvalidOperation as exc:
-        raise ValueError(f"tutar_usd parse edilemedi: {raw_value}") from exc
+    return _positive_decimal_to_float(_currency_to_decimal(raw_value))
 
 
 def normalize_column_name(column_name: str) -> str:
@@ -143,6 +129,88 @@ class ImportService:
             raise ImportValidationError(f"Kolonlar okunamadi: {exc}") from exc
         return [str(column) for column in dataframe.columns]
 
+    def read_preview_rows(
+        self,
+        file_path: Path,
+        *,
+        sheet_name: str | None = None,
+        column_mapping: dict[str, str] | None = None,
+    ) -> list[PreviewRow]:
+        """Read the people of a file as checked, editable preview rows.
+
+        Fully empty rows are left out. Nothing is written to the database.
+        """
+
+        self._ensure_supported_file(file_path)
+        effective_sheet_name = self._effective_sheet_name(file_path, sheet_name)
+        dataframe = self._read_dataframe(file_path, effective_sheet_name)
+        dataframe = self._apply_mapping_or_normalize(dataframe, column_mapping)
+        validate_required_columns(dataframe.columns)
+
+        rows: list[PreviewRow] = []
+        for index, row in dataframe.iterrows():
+            raw_data = self._row_to_clean_dict(row.to_dict())
+            preview = PreviewRow(
+                values={name: _clean_text(raw_data.get(name, "")) for name in PREVIEW_FIELDS},
+                source_row=int(index) + 2,
+            )
+            if not preview.is_blank:
+                rows.append(preview)
+
+        # The cleaned file values are the baseline that marks a cell as edited.
+        return [replace(row, original=dict(row.values)) for row in check_preview_rows(rows)]
+
+    def import_preview_rows(
+        self,
+        rows: list[PreviewRow],
+        *,
+        batch_name: str,
+        source_file_name: str,
+        sheet_name: str | None,
+    ) -> ImportResult:
+        """Create a period from the rows confirmed on the preview screen.
+
+        Rows are checked again here; if any row that would be imported has an
+        error, nothing is written. Otherwise the period and all of its people are
+        written in one transaction.
+        """
+
+        name = " ".join(batch_name.split())
+        if not name:
+            raise ImportValidationError("Dönem adı boş olamaz.")
+
+        checked = check_preview_rows(rows)
+        active = [row for row in checked if row.is_active]
+        invalid = [row for row in active if row.errors]
+        if invalid:
+            raise ImportValidationError(
+                f"{len(invalid)} satırda hata var. Düzelt ya da sil, sonra tekrar dene."
+            )
+        if not active:
+            raise ImportValidationError("İçe aktarılacak kişi yok.")
+
+        import_batch, records = self.repository.create_import(
+            ImportBatchCreate(name=name, source_file_name=source_file_name, sheet_name=sheet_name),
+            [_record_create(row, source_file_name) for row in active],
+        )
+        logger.info(
+            "Preview import completed | file=%s batch_id=%s sheet=%s imported=%s removed=%s added=%s edited=%s",
+            source_file_name,
+            import_batch.id,
+            sheet_name,
+            len(records),
+            sum(1 for row in checked if row.removed and not row.is_blank),
+            sum(1 for row in active if row.original is None),
+            sum(1 for row in active if row.original is not None and row.values != row.original),
+        )
+        return ImportResult(
+            source_file=source_file_name,
+            batch=import_batch,
+            imported_count=len(records),
+            failed_count=0,
+            records=records,
+        )
+
     def import_file(
         self,
         file_path: Path,
@@ -151,74 +219,26 @@ class ImportService:
         sheet_name: str | None = None,
         column_mapping: dict[str, str] | None = None,
     ) -> ImportResult:
-        """Read an import file, persist valid rows, and report invalid rows."""
+        """Import every valid row of a file without a preview; report invalid rows."""
 
-        self._ensure_supported_file(file_path)
-
+        rows = self.read_preview_rows(file_path, sheet_name=sheet_name, column_mapping=column_mapping)
         effective_sheet_name = self._effective_sheet_name(file_path, sheet_name)
-        dataframe = self._read_dataframe(file_path, effective_sheet_name)
-        dataframe = self._apply_mapping_or_normalize(dataframe, column_mapping)
-        validate_required_columns(dataframe.columns)
-
-        records_to_create: list[InvoiceRecordCreate] = []
-        row_errors: list[RowValidationError] = []
-
-        for index, row in dataframe.iterrows():
-            source_row_number = int(index) + 2
-            raw_data = self._row_to_clean_dict(row.to_dict())
-            raw_amount = raw_data.get("tutar_usd", "")
-            try:
-                normalized_amount = parse_currency(raw_amount)
-                raw_data["tutar_usd"] = normalized_amount
-                logger.info(
-                    "Import amount parsed | file=%s row=%s raw_value=%r normalized_value=%s",
-                    file_path.name,
-                    source_row_number,
-                    raw_amount,
-                    normalized_amount,
-                )
-            except ValueError as exc:
-                error_message = str(exc)
-                row_errors.append(
-                    RowValidationError(
-                        row_number=source_row_number,
-                        errors=[error_message],
-                        raw_data=raw_data,
-                    )
-                )
-                logger.info(
-                    "Import row skipped | file=%s row=%s raw_value=%r amount_parse_error=%s",
-                    file_path.name,
-                    source_row_number,
-                    raw_amount,
-                    error_message,
-                )
-                continue
-
-            validated_data, errors = validate_import_row(raw_data)
-            if errors:
-                row_errors.append(
-                    RowValidationError(
-                        row_number=source_row_number,
-                        errors=errors,
-                        raw_data=raw_data,
-                    )
-                )
-                logger.info(
-                    "Import row skipped | file=%s row=%s errors=%s",
-                    file_path.name,
-                    source_row_number,
-                    errors,
-                )
-                continue
-
-            assert validated_data is not None
-            records_to_create.append(
-                InvoiceRecordCreate(
-                    **validated_data,
-                    kaynak_dosya=file_path.name,
-                    kaynak_satir_no=source_row_number,
-                )
+        valid_rows = [row for row in rows if not row.errors]
+        row_errors = [
+            RowValidationError(
+                row_number=row.source_row or 0,
+                errors=list(row.errors.values()),
+                raw_data=dict(row.values),
+            )
+            for row in rows
+            if row.errors
+        ]
+        for row_error in row_errors:
+            logger.info(
+                "Import row skipped | file=%s row=%s errors=%s",
+                file_path.name,
+                row_error.row_number,
+                row_error.errors,
             )
 
         # Rows are validated first and persisted together with the batch in one
@@ -229,7 +249,7 @@ class ImportService:
                 source_file_name=file_path.name,
                 sheet_name=effective_sheet_name,
             ),
-            records_to_create,
+            [_record_create(row, file_path.name) for row in valid_rows],
         )
 
         logger.info(
@@ -328,6 +348,147 @@ class ImportService:
             else:
                 clean_row[key] = value
         return clean_row
+
+
+def check_preview_rows(rows: list[PreviewRow]) -> list[PreviewRow]:
+    """Clean every row and attach field errors and warnings.
+
+    This is the single rule set for the preview: the live check, the final
+    import and the plain file import all go through it. Removed and empty rows
+    get no errors because they are not imported.
+    """
+
+    cleaned: list[PreviewRow] = []
+    for row in rows:
+        values, errors = check_row_values(row.values)
+        is_used = not row.removed and any(values.values())
+        cleaned.append(replace(row, values=values, errors=errors if is_used else {}, warnings={}))
+
+    tckn_counts = Counter(
+        row.values["tc_kimlik_no"]
+        for row in cleaned
+        if row.is_active and "tc_kimlik_no" not in row.errors
+    )
+    return [
+        replace(
+            row,
+            warnings={"tc_kimlik_no": f"Listede {tckn_counts[row.values['tc_kimlik_no']]} kez var."},
+        )
+        if row.is_active and tckn_counts.get(row.values["tc_kimlik_no"], 0) > 1
+        else row
+        for row in cleaned
+    ]
+
+
+def check_row_values(values: dict[str, Any]) -> tuple[dict[str, str], dict[str, str]]:
+    """Return the cleaned values of one row and its errors keyed by field."""
+
+    cleaned = {name: _clean_text(values.get(name, "")) for name in PREVIEW_FIELDS}
+    errors: dict[str, str] = {}
+
+    if not cleaned["ad"]:
+        errors["ad"] = "Ad boş olamaz."
+    if not cleaned["soyad"]:
+        errors["soyad"] = "Soyad boş olamaz."
+
+    tckn = cleaned["tc_kimlik_no"].replace(" ", "")
+    if tckn.endswith(".0"):  # Excel number cells come back as "12345678901.0"
+        tckn = tckn[:-2]
+    cleaned["tc_kimlik_no"] = tckn
+    if not tckn:
+        errors["tc_kimlik_no"] = "TCKN boş olamaz."
+    elif not tckn.isdigit() or len(tckn) != 11:
+        errors["tc_kimlik_no"] = "TCKN 11 haneli rakam olmalı."
+
+    try:
+        cleaned["tutar_usd"] = format_amount(parse_amount(cleaned["tutar_usd"]))
+    except ValueError as exc:
+        errors["tutar_usd"] = str(exc)
+
+    return cleaned, errors
+
+
+def parse_amount(value: Any) -> Decimal:
+    """Parse a USD amount into a positive Decimal with at most two decimals.
+
+    Uses the same separator rules as `parse_currency` ("1.450" and "1,450" are
+    1450; "1450,50" and "1.450,50" are 1450.50).
+    """
+
+    text = _clean_text(value)
+    if not text:
+        raise ValueError("Tutar boş olamaz.")
+    try:
+        amount = _currency_to_decimal(text)
+    except ValueError as exc:
+        raise ValueError("Tutar sayı olmalı (örn. 1450,50).") from exc
+    if amount <= 0:
+        raise ValueError("Tutar 0'dan büyük olmalı.")
+    cents = amount.quantize(Decimal("0.01"))
+    # Excel float noise such as 1450.1000000000001 is rounded; real extra digits are not.
+    if abs(amount - cents) > Decimal("0.000001"):
+        raise ValueError("En fazla 2 ondalık basamak olabilir.")
+    return cents
+
+
+def format_amount(amount: Decimal) -> str:
+    """Format an amount the way the preview shows it (dot decimal, two places)."""
+
+    return f"{amount:.2f}"
+
+
+def summarize_preview(rows: list[PreviewRow]) -> dict[str, Any]:
+    """Return the counts and total shown under the preview table."""
+
+    active = [row for row in rows if row.is_active]
+    total = sum(
+        (Decimal(row.values["tutar_usd"]) for row in active if "tutar_usd" not in row.errors),
+        Decimal("0"),
+    )
+    return {
+        "count": len(active),
+        "total_usd": format_amount(total),
+        "error_count": sum(1 for row in active if row.errors),
+        "removed_count": sum(1 for row in rows if row.removed and not row.is_blank),
+    }
+
+
+def _record_create(row: PreviewRow, source_file_name: str) -> InvoiceRecordCreate:
+    return InvoiceRecordCreate(
+        ad=row.values["ad"],
+        soyad=row.values["soyad"],
+        tc_kimlik_no=row.values["tc_kimlik_no"],
+        tutar_usd=float(Decimal(row.values["tutar_usd"])),
+        aciklama=row.values["aciklama"],
+        kaynak_dosya=source_file_name,
+        kaynak_satir_no=row.source_row,
+    )
+
+
+def _clean_text(value: Any) -> str:
+    if value is None:
+        return ""
+    try:
+        if pd.isna(value):
+            return ""
+    except (TypeError, ValueError):
+        pass
+    return " ".join(str(value).split())
+
+
+def _currency_to_decimal(value: str) -> Decimal:
+    """Turn an amount string into a finite Decimal, sign not checked."""
+
+    cleaned = value.replace("$", "").replace("\u00a0", "").replace(" ", "").strip()
+    if not cleaned:
+        raise ValueError("tutar_usd bos olamaz.")
+    try:
+        amount = Decimal(_normalize_currency_separators(cleaned))
+    except InvalidOperation as exc:
+        raise ValueError(f"tutar_usd parse edilemedi: {value}") from exc
+    if not amount.is_finite():
+        raise ValueError(f"tutar_usd sonlu bir sayi olmalidir: {amount}")
+    return amount
 
 
 def _normalize_currency_separators(value: str) -> str:

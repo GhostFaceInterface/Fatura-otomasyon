@@ -41,3 +41,4 @@
 - Kayit bazli hatalar batch'i durdurmaz; session-level veya temiz form reset hatalari batch'i guvenli durdurur.
 - Yerel veri silme `RecordCleanupService` uzerinden yapilir: IN_PROGRESS kayitlar ve aktif batch job'un donemi silinemez; silme portal taslaklarini etkilemez.
 - Yikici UI aksiyonlari `data-confirm` ile onay ister; ortak handler `base.html` icindedir.
+- Import sonrasi tutar degisikligi `RecordEditService` uzerinden yapilir; sadece `AMOUNT_EDITABLE_STATUSES` (taslagi olusmamis ve islenmeyen) kayitlar degisir, kural UPDATE'in WHERE kosulundadir. Taslak job'u tutari claim'den sonra okudugu icin yaris durumunda eski/yeni tutar karismaz.

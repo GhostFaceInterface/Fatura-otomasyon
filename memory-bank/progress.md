@@ -325,3 +325,12 @@ Notlar:
 
 - Onizleme durumu sadece sayfada tutulur; sayfadan ayrilirsa (uyari sorulur) degisiklikler kaybolur, dosya `data/imports` altinda kalir.
 - Mobilde tablo kendi kutusunda yatay kayar; ana kullanim masaustu.
+
+## Donem Sayfasinda Tutar Duzenleme (2026-10-28)
+
+Tamamlandi:
+
+- Satir bazli aninda kaydedilen tutar kutusu ve secililere toplu tutar.
+- Taslagi olusmus / kontrol bekleyen / islenen kayitlar DB seviyesinde korunur; aktif job'un doneminde duzenleme reddedilir.
+- `tests/test_record_edit_service.py`; tum paket 179 test ile basarili.
+- Gercek DB'nin kopyasiyla 8011'de tarayicida denendi: tekli kayit (1.500 -> 1500.00, toplam guncellendi), toplu 7 secim -> 6 guncellendi + 1 taslak olusmus kayit degismedi; dogrudan istekle taslak olusmus kaydin tutari degistirilemedi. Gercek DB'ye dokunulmadi.

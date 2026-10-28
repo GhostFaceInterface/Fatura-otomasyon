@@ -48,8 +48,15 @@ Hicbir donemle iliskisi olmayan eski kayitlar varsa ustte tek satirlik uyari ve 
   - `Tekrar dene`: hatali kisi tekrar `Bekliyor` olur.
   - `Taslak var` / `Taslak yok`: `Kontrol gerekli` kisiyi portalda kontrol ettikten sonra sonuclandirir.
   - `Sil`: kisiyi siler.
+- Tutar degistirme (ice aktarimdan sonra):
+  - Taslagi henuz olusmamis kisilerin (`Bekliyor`, `Secildi` ve tekrar denenebilir hatalar) tutari satirda bir kutu olarak gorunur. Yeni tutari yazip Enter'a bas veya kutudan cik; aninda kaydedilir, kutu yesil yanar ve basliktaki toplam guncellenir. `Esc` degisikligi geri alir.
+  - Tutar ice aktarimdaki kurallarla okunur: `1450`, `1.450`, `1450,50`, `1.450,50`.
+  - `Taslak olustu`, `Kontrol gerekli` ve `Isleniyor` kisilerin tutari kilitlidir (duz yazi). Portalda taslak zaten eski tutarla olustugu icin burada degistirmek yaniltici olurdu; bu kural veritabani guncellemesinde de uygulanir.
+  - Donemde taslak islemi calisirken tutarlar degistirilemez.
+  - Her degisiklik eski ve yeni tutarla `app.log` dosyasina yazilir.
 - Alt cubuk:
   - `Secilileri sil`: isaretli kisileri siler.
+  - `Yeni tutar` + `N kisinin tutarini degistir`: isaretli kisilere tek seferde ayni tutari verir. Kilitli kisiler secime dahil olsa bile degismez; onay mesaji ve sonuc mesaji kac kisinin atlandigini soyler.
   - `N kisi icin taslak olustur`: isaretli ve `Bekliyor` durumundaki kisiler icin toplu taslak islemini baslatir. Portal hazir degilse buton pasiftir.
 
 Islem arka planda calisir; sayfa ilerlemeyi kendisi gunceller. `Durdur` portalda islenen kisi bittikten sonra durdurur. Bitince ustte ozet satiri ve `Ayrintilar` (hata mesaji, ekran goruntusu yolu) gorunur.

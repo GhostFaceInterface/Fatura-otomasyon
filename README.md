@@ -86,6 +86,7 @@ Uygulama kullanıcıdan gelen Excel/CSV dosyasını okur, kayıtları lokal veri
 | Excel desteği | Çok sheet'li Excel dosyalarında sheet seçimi yapabilir. |
 | Kolon eşleştirme | Ad, soyad, TCKN ve tutar alanlarını kullanıcı kontrollü eşleştirir. |
 | İçe aktarım önizlemesi | Kaydetmeden önce kişileri silme, ekleme ve tutar/alan düzeltme imkânı verir. |
+| Tutar düzenleme | Taslağı oluşmamış kişilerin tutarı dönem sayfasında tek tek veya toplu değiştirilir; taslağı oluşmuş kayıtlar kilitlidir. |
 | Fatura dönemi | Her importu ayrı fatura dönemi olarak saklar. |
 | Kayıt kontrolü | Aktif fatura dönemindeki kayıtları listeler, arar, sıralar ve filtreler. |
 | Canlı arama | Ad, soyad veya TCKN yazıldıkça sonuçları beklemeden günceller. |

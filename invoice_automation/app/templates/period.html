@@ -7,7 +7,7 @@
 <div class="page-head">
   <div>
     <h1>{{ batch.name }}</h1>
-    <p class="sub">{{ batch.source_file_name }}{% if batch.sheet_name %} · {{ batch.sheet_name }}{% endif %} · {{ records|length }} kişi · {{ "%.2f"|format(total_usd) }} USD</p>
+    <p class="sub">{{ batch.source_file_name }}{% if batch.sheet_name %} · {{ batch.sheet_name }}{% endif %} · {{ records|length }} kişi · <span id="period-total">{{ "%.2f"|format(total_usd) }}</span> USD</p>
   </div>
   <form action="/periods/{{ batch.id }}/delete" method="post"
     data-confirm="&quot;{{ batch.name }}&quot; ve içindeki {{ records|length }} kişi silinsin mi?{% if counts.success or counts.review %} Bu dönemde {{ counts.success }} taslak oluşmuş; portaldaki taslaklar silinmez.{% endif %}">
@@ -77,6 +77,11 @@
   </select>
 </div>
 
+{% set any_editable = records|selectattr("islem_durumu", "in", AMOUNT_EDITABLE_STATUS_VALUES)|list %}
+{% if any_editable and not job_active %}
+<p class="muted small" style="margin: 0 0 8px">Tutarı değiştirmek için kutuya yazıp Enter'a bas. Birden fazla kişi için kişileri seç, alttan yeni tutarı gir. Taslağı oluşmuş kişilerin tutarı değiştirilemez.</p>
+{% endif %}
+
 <form id="bulk" method="post">
   <div class="table-wrap">
     <table>
@@ -96,11 +101,21 @@
         <tr data-group="{{ group }}" data-search="{{ record.ad }} {{ record.soyad }} {{ record.tc_kimlik_no }}">
           <td class="check">
             <input type="checkbox" name="record_ids" value="{{ record.id }}" class="row-check"
-              data-eligible="{{ '1' if group == 'waiting' else '0' }}" {% if group == 'progress' %}disabled{% endif %}>
+              data-eligible="{{ '1' if group == 'waiting' else '0' }}"
+              data-editable="{{ '1' if record.islem_durumu in AMOUNT_EDITABLE_STATUS_VALUES else '0' }}" {% if group == 'progress' %}disabled{% endif %}>
           </td>
           <td>{{ record.ad }} {{ record.soyad }}</td>
           <td>{{ record.tc_kimlik_no }}</td>
-          <td class="num">{{ "%.2f"|format(record.tutar_usd) }}</td>
+          <td class="num">
+            {% if record.islem_durumu in AMOUNT_EDITABLE_STATUS_VALUES and not job_active %}
+            <input type="text" class="cell-input amount-input" value="{{ '%.2f'|format(record.tutar_usd) }}"
+              data-saved="{{ '%.2f'|format(record.tutar_usd) }}" data-url="/records/{{ record.id }}/amount"
+              inputmode="decimal" autocomplete="off" aria-label="{{ record.ad }} {{ record.soyad }} tutarı">
+            <div class="cell-msg"></div>
+            {% else %}
+            <span title="{% if record.islem_durumu == 'IN_PROGRESS' or job_active %}İşlem sürüyor; tutar değiştirilemez.{% else %}Bu kişinin tutarı değiştirilemez ({{ record.islem_durumu|status_label }}).{% endif %}">{{ "%.2f"|format(record.tutar_usd) }}</span>
+            {% endif %}
+          </td>
           <td>{{ status_cell(record) }}</td>
           <td class="actions">{{ row_actions(record) }}</td>
         </tr>
@@ -116,6 +131,12 @@
     <span id="selected-text" class="muted">Seçili yok</span>
     <span class="spacer"></span>
     <button type="submit" id="delete-selected" class="btn btn-danger" formaction="/periods/{{ batch.id }}/records/delete" disabled>Seçilileri sil</button>
+    {% if not job_active %}
+    <span id="bulk-amount-group" class="row" hidden>
+      <input type="text" name="amount" id="bulk-amount" placeholder="Yeni tutar (USD)" inputmode="decimal" autocomplete="off" style="width: 150px">
+      <button type="submit" id="amount-selected" class="btn" formaction="/periods/{{ batch.id }}/records/amount" disabled>Tutarı değiştir</button>
+    </span>
+    {% endif %}
     {% if not session_ready %}<a href="/portal" class="small">Taslak için önce portala giriş yap</a>{% endif %}
     <button type="submit" id="draft-selected" class="btn btn-primary" formaction="/periods/{{ batch.id }}/draft"
       data-blocked="{{ '1' if not session_ready or job_active or other_job_running else '0' }}" disabled>Taslak oluştur</button>
@@ -136,6 +157,11 @@
     const deleteButton = document.getElementById("delete-selected");
     const draftButton = document.getElementById("draft-selected");
     const draftBlocked = draftButton.dataset.blocked === "1";
+    const bulkGroup = document.getElementById("bulk-amount-group");
+    const bulkAmount = document.getElementById("bulk-amount");
+    const amountButton = document.getElementById("amount-selected");
+    const periodTotal = document.getElementById("period-total");
+    const bulkForm = document.getElementById("bulk");
 
     // Lowercase with Turkish rules on both sides so İ/ı match as typed.
     const haystack = new Map(rows.map((row) => [row, row.dataset.search.toLocaleLowerCase("tr")]));
@@ -151,6 +177,17 @@
       draftButton.disabled = draftBlocked || eligible === 0;
       draftButton.textContent = eligible ? `${eligible} kişi için taslak oluştur` : "Taslak oluştur";
       draftButton.dataset.confirm = `${eligible} kişi için portalda taslak oluşturulacak. Başlatılsın mı?`;
+      if (bulkGroup) {
+        const editable = checked.filter((box) => box.dataset.editable === "1").length;
+        const value = bulkAmount.value.trim();
+        bulkGroup.hidden = editable === 0;
+        amountButton.disabled = editable === 0 || !value;
+        amountButton.textContent = editable ? `${editable} kişinin tutarını değiştir` : "Tutarı değiştir";
+        const skipped = checked.length - editable;
+        amountButton.dataset.confirm = `${editable} kişinin tutarı ${value} USD olacak.`
+          + (skipped ? ` Seçili ${skipped} kişi değişmez (taslağı oluşmuş veya kontrol bekliyor).` : "")
+          + " Devam edilsin mi?";
+      }
       const visible = visibleChecks();
       selectAll.checked = visible.length > 0 && visible.every((box) => box.checked);
     };
@@ -175,7 +212,66 @@
       refresh();
     });
     rows.forEach((row) => checkOf(row).addEventListener("change", refresh));
+    if (bulkAmount) {
+      bulkAmount.addEventListener("input", refresh);
+      // Enter here must change the amount, never trigger "Seçilileri sil".
+      bulkAmount.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter") return;
+        event.preventDefault();
+        if (!amountButton.disabled) bulkForm.requestSubmit(amountButton);
+      });
+    }
     refresh();
+
+    // One person's amount: saved as soon as the box is left or Enter is pressed.
+    document.querySelectorAll(".amount-input").forEach((input) => {
+      const message = input.nextElementSibling;
+      const showError = (text) => {
+        input.classList.add("invalid");
+        message.textContent = text;
+      };
+      const save = async () => {
+        const value = input.value.trim();
+        if (value === input.dataset.saved) {
+          input.classList.remove("invalid");
+          message.textContent = "";
+          return;
+        }
+        input.classList.remove("invalid", "saved");
+        message.textContent = "";
+        try {
+          const response = await fetch(input.dataset.url, {
+            method: "POST",
+            headers: { Accept: "application/json" },
+            body: new URLSearchParams({ amount: value }),
+          });
+          const result = await response.json();
+          if (!response.ok) {
+            showError(result.error || "Kaydedilemedi.");
+            return;
+          }
+          input.dataset.saved = result.amount;
+          if (input.value.trim() === value) input.value = result.amount;
+          periodTotal.textContent = result.total_usd;
+          input.classList.add("saved");
+          window.setTimeout(() => input.classList.remove("saved"), 1500);
+        } catch (error) {
+          showError("Kaydedilemedi; bağlantıyı kontrol edip tekrar dene.");
+        }
+      };
+      input.addEventListener("change", save);
+      input.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") {
+          event.preventDefault(); // never submit the surrounding form
+          input.blur();
+        } else if (event.key === "Escape") {
+          input.value = input.dataset.saved;
+          input.classList.remove("invalid");
+          message.textContent = "";
+          input.blur();
+        }
+      });
+    });
 
     const job = document.getElementById("job");
     if (job) {

@@ -49,6 +49,10 @@ class DeletionBlockedError(InvoiceAutomationError):
     """Raised when local data cannot be deleted because it is being processed."""
 
 
+class RecordEditBlockedError(InvoiceAutomationError):
+    """Raised when records cannot be edited because a batch job may be using them."""
+
+
 class RecordNotEligibleError(ValueError):
     """Raised when a record is not in a status that allows draft creation."""
 

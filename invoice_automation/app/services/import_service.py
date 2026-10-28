@@ -436,10 +436,9 @@ def summarize_preview(rows: list[PreviewRow]) -> dict[str, Any]:
     """Return the counts and total shown under the preview table."""
 
     active = [row for row in rows if row.is_active]
-    total = sum(
-        (Decimal(row.values["tutar_usd"]) for row in active if "tutar_usd" not in row.errors),
-        Decimal("0"),
-    )
+    # Only rows that would be imported count; a sheet's own total row (amount but
+    # no person) shows up as an error row and must not inflate the total.
+    total = sum((Decimal(row.values["tutar_usd"]) for row in active if not row.errors), Decimal("0"))
     return {
         "count": len(active),
         "total_usd": format_amount(total),

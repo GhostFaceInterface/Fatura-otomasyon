@@ -7,6 +7,7 @@ from pathlib import Path
 import sqlite3
 
 from invoice_automation.app.constants import (
+    AMOUNT_EDITABLE_STATUSES,
     BATCH_ELIGIBLE_STATUSES,
     RETRYABLE_STATUSES,
     STALE_IN_PROGRESS_ERROR_CODE,
@@ -476,6 +477,34 @@ class InvoiceRecordRepository:
                   AND islem_durumu IN ({status_placeholders})
                 """,
                 (InvoiceStatus.PENDING.value, utc_timestamp(), *normalized_ids, *retryable),
+            )
+            return cursor.rowcount
+
+    def update_amounts(self, record_ids: list[int], amount: float, *, batch_id: int) -> int:
+        """Set the USD amount of records of one period and return the updated count.
+
+        Only records in AMOUNT_EDITABLE_STATUSES change. The status check is part
+        of the UPDATE, so a record claimed by the draft job in the meantime is left
+        alone; the job reads the amount only after its own claim.
+        """
+
+        normalized_ids = sorted({int(record_id) for record_id in record_ids})
+        if not normalized_ids:
+            return 0
+        editable = tuple(status.value for status in AMOUNT_EDITABLE_STATUSES)
+        id_placeholders = ",".join("?" for _ in normalized_ids)
+        status_placeholders = ",".join("?" for _ in editable)
+        with self._connect() as connection:
+            cursor = connection.execute(
+                f"""
+                UPDATE invoice_records
+                SET tutar_usd = ?,
+                    guncelleme_zamani = ?
+                WHERE id IN ({id_placeholders})
+                  AND batch_id = ?
+                  AND islem_durumu IN ({status_placeholders})
+                """,
+                (amount, utc_timestamp(), *normalized_ids, batch_id, *editable),
             )
             return cursor.rowcount
 

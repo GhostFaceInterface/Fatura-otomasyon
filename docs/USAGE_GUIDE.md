@@ -31,7 +31,7 @@ http://127.0.0.1:8010
    - Hatali hucreler kirmizi ve altinda sebebi yazar. Hata varken ice aktarma butonu kapalidir; duzelt ya da `Hatalilarin hepsini sil`.
    - Ayni TCKN listede birden fazla varsa sari uyari cikar ama engellemez.
    - Ustteki arama ve `Tumu / Hatali / Degistirilen / Yeni eklenen / Silinen` secimi uzun listede bulmayi kolaylastirir.
-5. `Donem adi` yaz (ornek: `Ekim 2026 umre`) ve `N kisiyi ice aktar`.
+5. En alttaki `Donem adi` kutusuna yaz (ornek: `Ekim 2026 umre`) ve `N kisiyi ice aktar`a tikla; onay sorusu kac kisinin hangi doneme aktarilacagini soyler. Enter tusu hicbir kutuda ice aktarma yapmaz; listede aramak icin en ustteki `Listede ara` kutusu kullanilir ve yazdikca suzer.
 
 Tabloda ne gorunuyorsa o aktarilir. Sunucu tum satirlari ayni kurallarla tekrar kontrol eder; tek bir hata bile varsa hicbir kayit yazilmaz. Hata yoksa donem ve tum kisiler tek seferde (tek transaction) yazilir ve donem sayfasi acilir. Yanlis dosya yuklendiyse donem sayfasindaki `Donemi sil` donemi ve eklenen kisileri siler.
 

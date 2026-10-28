@@ -174,3 +174,8 @@ Onizlemede yanlislikla ice aktarma (2026-10-28):
 - Kullanici aramak icin en ustteki `Donem adi` kutusuna "ersöz" yazip Enter'a basti; form implicit submit ile 34 kisiyi "ersöz" donemi olarak ice aktardi. Donem 13 (hepsi PENDING) panelin `POST /periods/13/delete` aksiyonuyla silindi.
 - Duzeltme: onizleme formunda hicbir input'ta Enter submit etmez; `Donem adi` alt cubuga ice aktar butonunun yanina tasindi, en ustteki ilk kutu `Listede ara`; ice aktar butonu `N kisi "ad" donemi olarak ice aktarilacak` onayini sorar.
 - Kural: formun icindeki her text input (arama dahil) Enter ile yikici/kalici bir aksiyonu tetiklememeli.
+
+Donem sayfasinda arama korunur (2026-10-28):
+
+- Bug: arama yapip satir silince sayfa `/periods/{id}`'ye donuyor, arama sifirlaniyordu (arama sadece tarayici state'iydi).
+- Duzeltme: arama ve durum filtresi adreste (`?q=&group=`) tutulur (`history.replaceState`), satir aksiyon formunun ve toplu formun `next` alani bu adresle guncellenir. Toplu rotalar (`records/delete`, `records/amount`, `draft`) `next`'i `_period_target` ile sadece ayni donem sayfasina izinli olarak kullanir. Sayfa acilirken `q`/`group` server-side input'a yazilir ve `applyFilter` calisir.

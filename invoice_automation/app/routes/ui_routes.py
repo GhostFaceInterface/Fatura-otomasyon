@@ -112,7 +112,12 @@ def periods(request: Request) -> HTMLResponse:
 
 
 @router.get("/periods/{batch_id}", response_class=HTMLResponse, response_model=None)
-def period(request: Request, batch_id: int) -> HTMLResponse | RedirectResponse:
+def period(
+    request: Request,
+    batch_id: int,
+    q: str = Query(default=""),
+    group: str = Query(default=""),
+) -> HTMLResponse | RedirectResponse:
     """Show the people of one period and every action on them."""
 
     repository = InvoiceRecordRepository()
@@ -134,6 +139,8 @@ def period(request: Request, batch_id: int) -> HTMLResponse | RedirectResponse:
         report=period_job.report if period_job is not None and not period_job.is_active else None,
         other_job_running=job is not None and job.is_active and period_job is None,
         session_ready=portal_session_manager.state.status == "READY",
+        q=q,
+        group=group,
     )
 
 
@@ -154,25 +161,27 @@ def delete_period(batch_id: int) -> RedirectResponse:
 def delete_period_records(
     batch_id: int,
     record_ids: list[int] | None = Form(default=None),
+    next: str = Form(default=""),
 ) -> RedirectResponse:
     """Delete the checked people of a period."""
 
     try:
         deleted = RecordCleanupService().delete_records(record_ids or [], batch_id=batch_id)
     except DeletionBlockedError as exc:
-        return _redirect(f"/periods/{batch_id}", str(exc), error=True)
-    return _redirect(f"/periods/{batch_id}", f"{deleted} kişi silindi.")
+        return _redirect(_period_target(batch_id, next), str(exc), error=True)
+    return _redirect(_period_target(batch_id, next), f"{deleted} kişi silindi.")
 
 
 @router.post("/periods/{batch_id}/records/amount")
 def update_period_amounts(
     batch_id: int,
     record_ids: list[int] | None = Form(default=None),
+    next: str = Form(default=""),
     amount: str = Form(default=""),
 ) -> RedirectResponse:
     """Give the checked people of a period one new amount."""
 
-    target = f"/periods/{batch_id}"
+    target = _period_target(batch_id, next)
     wanted = set(record_ids or [])
     if not wanted:
         return _redirect(target, "Kişi seçilmedi.", error=True)
@@ -190,10 +199,11 @@ def update_period_amounts(
 def start_drafts(
     batch_id: int,
     record_ids: list[int] | None = Form(default=None),
+    next: str = Form(default=""),
 ) -> RedirectResponse:
     """Select the checked people and start the background draft job."""
 
-    target = f"/periods/{batch_id}"
+    target = _period_target(batch_id, next)
     if portal_session_manager.state.status != "READY":
         return _redirect(target, "Portal oturumu hazır değil. Önce Portal sayfasından giriş yap.", error=True)
     if batch_job_manager.is_running():
@@ -587,6 +597,15 @@ def _session_action(action, failure_message: str) -> RedirectResponse:
         logger.exception(failure_message)
         return _redirect("/portal", f"{failure_message}: {exc}", error=True)
     return _redirect("/portal")
+
+
+def _period_target(batch_id: int, next_url: str) -> str:
+    """Return to the period page with its search kept; ignore any other address."""
+
+    base = f"/periods/{batch_id}"
+    if next_url == base or next_url.startswith(base + "?"):
+        return next_url
+    return base
 
 
 def _running_batch_id() -> int | None:

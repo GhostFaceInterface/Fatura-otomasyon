@@ -68,11 +68,11 @@
 {% endif %}
 
 <div class="row" style="margin-bottom: 12px">
-  <input type="search" id="search" placeholder="Ad, soyad veya TCKN ara" autocomplete="off" style="flex: 1; min-width: 200px; max-width: 360px">
+  <input type="search" id="search" value="{{ q }}" placeholder="Ad, soyad veya TCKN ara" autocomplete="off" style="flex: 1; min-width: 200px; max-width: 360px">
   <select id="group">
     <option value="">Tümü ({{ records|length }})</option>
     {% for key, label in STATUS_GROUPS %}
-    {% if counts[key] %}<option value="{{ key }}">{{ label }} ({{ counts[key] }})</option>{% endif %}
+    {% if counts[key] %}<option value="{{ key }}" {% if key == group %}selected{% endif %}>{{ label }} ({{ counts[key] }})</option>{% endif %}
     {% endfor %}
   </select>
 </div>
@@ -83,6 +83,7 @@
 {% endif %}
 
 <form id="bulk" method="post">
+  <input type="hidden" name="next" id="bulk-next" value="{{ request.url.path }}">
   <div class="table-wrap">
     <table>
       <thead>
@@ -192,6 +193,21 @@
       selectAll.checked = visible.length > 0 && visible.every((box) => box.checked);
     };
 
+    // The search and filter live in the page address, so every action that
+    // reloads the page (delete, retry, amount, ...) comes back to the same list.
+    const rowActionNext = document.querySelector("#row-action input[name=next]");
+    const bulkNext = document.getElementById("bulk-next");
+    const syncAddress = () => {
+      const params = new URLSearchParams();
+      if (search.value.trim()) params.set("q", search.value.trim());
+      if (group.value) params.set("group", group.value);
+      const query = params.toString();
+      const target = window.location.pathname + (query ? `?${query}` : "");
+      window.history.replaceState(null, "", target);
+      rowActionNext.value = target;
+      bulkNext.value = target;
+    };
+
     const applyFilter = () => {
       const term = search.value.trim().toLocaleLowerCase("tr");
       const wanted = group.value;
@@ -202,6 +218,7 @@
         if (match) shown += 1;
       });
       noMatch.hidden = shown > 0 || rows.length === 0;
+      syncAddress();
       refresh();
     };
 
@@ -221,7 +238,7 @@
         if (!amountButton.disabled) bulkForm.requestSubmit(amountButton);
       });
     }
-    refresh();
+    applyFilter();
 
     // One person's amount: saved as soon as the box is left or Enter is pressed.
     document.querySelectorAll(".amount-input").forEach((input) => {

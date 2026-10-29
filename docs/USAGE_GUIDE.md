@@ -22,7 +22,7 @@ http://127.0.0.1:8010
 
 1. `Dosya yukle` > Excel veya CSV sec > `Devam`.
 2. Excel'de birden fazla sayfa varsa `Sayfa` listesinden dogru sayfayi sec.
-3. Ad, Soyad, TC kimlik no ve Tutar (USD) kolonlarini sec; Aciklama istege baglidir. `Onizle`.
+3. Ad, Soyad, TC kimlik no ve Tutar (USD) kolonlarini sec; Aciklama istege baglidir. `Onizle`. Bilinen basliklar kendiliginden secilir; Tutar icin `Tutar` yoksa odeme sayfalarindaki `ÖDENEN` secilir (`ÜCRET` degil).
 4. Onizleme ekraninda dosyadaki kisiler duzenlenebilir bir tabloda gelir. Bu noktada veritabanina hicbir sey yazilmamistir.
    - Hucreye tiklayip ad, soyad, TCKN, tutar veya aciklamayi duzelt. Degisen hucre sari olur; uzerine gelince dosyadaki eski deger gorunur.
    - Aciklama faturanin Açıklama / Notlar kutusuna yazilir; bos birakirsan kutu bos kalir. Mal/Hizmet adi her zaman `YURT DIŞI KONAKLAMA BEDELİ` olur.

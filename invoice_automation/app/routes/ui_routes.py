@@ -688,6 +688,13 @@ def _default_mapping(columns: list[str]) -> dict[str, str]:
         normalized = normalize_column_name(column)
         if normalized in {"ad", "soyad", "tc_kimlik_no", "tutar_usd", "aciklama"}:
             mapping.setdefault(normalized, column)
+    # Payment sheets name the amount "ÖDENEN" (next to "ÜCRET", the list price).
+    # Only a suggestion: a real "Tutar" column still wins.
+    if "tutar_usd" not in mapping:
+        for column in columns:
+            if normalize_column_name(column) == "odenen":
+                mapping["tutar_usd"] = column
+                break
     return mapping
 
 
